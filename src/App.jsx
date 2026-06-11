@@ -183,51 +183,71 @@ function kfwGesamtbasis(anzahlWE) {
   return summe;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// KfW 458 – ANTEILIGE Berechnung bei zentraler Heizung (offizielles KfW-Beispiel)
+//
+// Methode laut KfW (WEG-/MFH-Beispiel):
+//  1. Investitionskosten werden ANTEILIG auf die Wohneinheiten verteilt
+//     (Standard: gleichmäßig je WE; alternativ nach Miteigentumsanteil).
+//  2. Jeder WE-Anteil wird auf ihren KfW-Höchstbetrag gedeckelt
+//     (WE1: 30.000 €, WE2–6: 15.000 €, WE7+: 8.000 €).
+//  3. Auf jeden gedeckelten Anteil wird der für DIESE WE gültige Satz gerechnet:
+//       • vermietet:      30 % Grund (+5 % Effizienz)  → max. 35 %
+//       • selbstgenutzt:  30 % + 20 % Klima + 30 % Eink. + 5 % Effizienz → max. 70 %
+//       • Einkommensbonus nur für die EINE selbstgenutzte Hauptwohneinheit
+// ─────────────────────────────────────────────────────────────────────────────
 function berechneKfW({ gebaeude, selbstgenutztWE, investition, anzahlWE,
                        gasAlt, mitKlima, mitEinkommen, mitEffizienz, heiztyp,
                        mitEmissionsZuschlag }) {
-  // anzahlWE: 1 für EFH, 2 für ZFH, oder mehr
-  const weAnzahl  = gebaeude === "efh" ? 1 : (anzahlWE || 2);
-  const gesamtBasis = Math.min(investition, kfwGesamtbasis(weAnzahl));
-  const rest        = Math.max(0, investition - kfwGesamtbasis(weAnzahl));
+  const weAnzahl = gebaeude === "efh" ? 1 : (anzahlWE || 2);
 
-  // WE 1 = die (einzige mögliche) selbstgenutzte HAUPTwohneinheit.
-  // Einkommensbonus gilt ausschließlich für die Hauptwohneinheit → istHauptwohnung nur bei WE1 true.
-  const basisWE1 = Math.min(investition, kfwBasisFuerWE(1));
-  const we1 = calcWE({ basis:basisWE1, gasAlt,
-                        selbstgenutzt: selbstgenutztWE >= 1,
-                        istHauptwohnung: selbstgenutztWE >= 1,
+  // 1. Kostenanteil je WE — gleichmäßige Aufteilung
+  const anteilProWE = investition / weAnzahl;
+
+  // 2./3. Jede WE einzeln berechnen
+  const weListe = [];
+  let zuschussGes = 0;
+  let gesamtBasis = 0;
+  let rest = 0;
+
+  for (let i = 1; i <= weAnzahl; i++) {
+    const deckel = kfwBasisFuerWE(i);
+    const basis  = Math.min(anteilProWE, deckel);     // Anteil, gedeckelt
+    rest += Math.max(0, anteilProWE - deckel);         // nicht förderfähiger Überhang
+    gesamtBasis += basis;
+
+    const selbst = i <= selbstgenutztWE;               // WE 1..selbstgenutztWE = selbst genutzt
+    const haupt  = i === 1 && selbstgenutztWE >= 1;    // nur WE1 ist Hauptwohneinheit
+
+    const we = calcWE({ basis, gasAlt,
+                        selbstgenutzt: selbst,
+                        istHauptwohnung: haupt,
                         mitKlima, mitEinkommen, mitEffizienz, heiztyp });
-
-  // WE2 nur bei ZFH/MFH. Falls selbst genutzt: Klimabonus möglich, ABER kein Einkommensbonus
-  // (dieser ist auf die eine Hauptwohneinheit beschränkt).
-  let we2 = null, basisWE2 = 0;
-  if (weAnzahl >= 2) {
-    basisWE2 = Math.min(Math.max(0, investition - kfwBasisFuerWE(1)), kfwBasisFuerWE(2));
-    we2 = calcWE({ basis:basisWE2, gasAlt,
-                   selbstgenutzt: selbstgenutztWE >= 2,
-                   istHauptwohnung: false,
-                   mitKlima, mitEinkommen, mitEffizienz, heiztyp });
+    we.nummer = i;
+    we.selbst = selbst;
+    weListe.push(we);
+    zuschussGes += we.zuschuss;
   }
 
-  // WE 3–n: stets vermietet → nur Grundförderung 30 % + Effizienzbonus 5 % = 35 %
-  let zuschussWeitereWE = 0, basisWeitereWE = 0;
-  for (let i = 3; i <= weAnzahl; i++) {
-    const b = Math.min(Math.max(0, investition - kfwGesamtbasis(i-1)), kfwBasisFuerWE(i));
-    basisWeitereWE += b;
-    const weX = calcWE({ basis:b, gasAlt, selbstgenutzt:false, istHauptwohnung:false,
-                          mitKlima:false, mitEinkommen:false, mitEffizienz, heiztyp });
-    zuschussWeitereWE += weX.zuschuss;
-  }
-
-  // Emissionsminderungszuschlag: pauschal 2.500 €, UNABHÄNGIG von Förderbasis-Deckel
-  // (nur für Biomasse-Anlagen – hier als optionaler Schalter)
+  // Emissionsminderungszuschlag: pauschal 2.500 €, unabhängig vom Förderdeckel (nur Biomasse)
   const emissionsZuschlag = mitEmissionsZuschlag ? 2500 : 0;
+  zuschussGes += emissionsZuschlag;
 
-  const zuschussGes = we1.zuschuss + (we2?.zuschuss || 0) + zuschussWeitereWE + emissionsZuschlag;
-  const effSatz     = investition > 0 ? Math.round(zuschussGes / investition * 1000) / 10 : 0;
+  const effSatz = investition > 0 ? Math.round(zuschussGes / investition * 1000) / 10 : 0;
 
-  return { we1, we2, zuschussGes, effSatz, investNetto: investition - zuschussGes,
+  // Kompatibilität mit bestehender Anzeige: we1 / we2 / Aggregat für WE3+
+  const we1 = weListe[0];
+  const we2 = weListe[1] || null;
+  const basisWE1 = we1?.basis || 0;
+  const basisWE2 = we2?.basis || 0;
+  let basisWeitereWE = 0, zuschussWeitereWE = 0;
+  for (let i = 2; i < weListe.length; i++) {
+    basisWeitereWE += weListe[i].basis;
+    zuschussWeitereWE += weListe[i].zuschuss;
+  }
+
+  return { we1, we2, weListe, anteilProWE, zuschussGes, effSatz,
+           investNetto: investition - zuschussGes,
            basisWE1, basisWE2, basisWeitereWE, rest, gesamtBasis,
            emissionsZuschlag, zuschussWeitereWE };
 }
@@ -671,9 +691,11 @@ export default function App() {
                     ))}
                     <div style={{ fontSize:10, color:T.textMuted, marginTop:8, padding:"9px 11px",
                       background:T.infoBoxAmber, borderRadius:8, lineHeight:1.7 }}>
-                      ⚖️ <strong>Wichtig (KfW-Merkblatt 12/2025):</strong> Der <strong>Einkommensbonus</strong> gilt
-                      nur für die <strong>eine selbstgenutzte Hauptwohneinheit</strong>. Der <strong>Klimabonus</strong>
-                      gilt für jede selbstgenutzte WE. Vermietete WE erhalten nur Grundförderung + Effizienzbonus.
+                      ⚖️ <strong>Wichtig (KfW-Merkblatt 12/2025):</strong> Die Investitionskosten werden
+                      <strong> anteilig auf die Wohneinheiten</strong> verteilt; je WE wird auf den eigenen
+                      Höchstbetrag gedeckelt (WE 1: 30.000 €, WE 2–6: je 15.000 €). Der <strong>Einkommensbonus</strong> gilt
+                      nur für die <strong>eine selbstgenutzte Hauptwohneinheit</strong>, der <strong>Klimabonus</strong>
+                      für jede selbstgenutzte WE. Vermietete WE erhalten nur Grundförderung + Effizienzbonus (max. 35 %).
                     </div>
                   </div>
                 )}
@@ -729,8 +751,11 @@ export default function App() {
                 <div style={{ marginBottom:16 }}>
                   {gebaeude==="zfh" ? (<>
                     <Row label="Investition gesamt" value={fmt(investition)} />
-                    <Row label={`Förderfähig WE 1 (max. ${fmt(KFW_WE1)})`} value={fmt(kfw.basisWE1)} color={T.textMuted} />
-                    <Row label={`Förderfähig WE 2 (max. ${fmt(KFW_WE2_6)})`} value={fmt(kfw.basisWE2)} color={T.textMuted} />
+                    <div style={{ fontSize:10, color:T.textFaint, marginBottom:6, marginTop:-2, paddingLeft:2 }}>
+                      Aufteilung: {fmt(kfw.anteilProWE)} je Wohneinheit ({anzahlWE} WE, gleichmäßig)
+                    </div>
+                    <Row label={`Förderfähig WE 1 (Anteil, max. ${fmt(KFW_WE1)})`} value={fmt(kfw.basisWE1)} color={T.textMuted} />
+                    <Row label={`Förderfähig WE 2 (Anteil, max. ${fmt(KFW_WE2_6)})`} value={fmt(kfw.basisWE2)} color={T.textMuted} />
                     {anzahlWE > 2 && <Row label={`Förderfähig WE 3–${Math.min(anzahlWE,6)}: je ${fmt(KFW_WE2_6)} / ab WE7: je ${fmt(KFW_WE7PLUS)}`} value={fmt(kfw.basisWeitereWE)} color={T.textMuted} />}
                     {kfw.rest>0 && <Row label="Über KfW-Deckel (0% Förderung)" value={fmt(kfw.rest)} color={isDark?"rgba(255,160,80,0.85)":"#c05010"} />}
                     <div style={{ height:1, background:T.divider, margin:"8px 0" }} />
