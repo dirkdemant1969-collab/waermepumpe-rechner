@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, Legend, ReferenceLine,
@@ -491,6 +492,14 @@ export default function App() {
             <TabBtn id="foerderung"   label="🏦 Förderrechner" />
             <TabBtn id="einstellungen" label="⚙️ Einstellungen" />
           </div>
+
+          <Link to="/spiele" style={{
+            display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:20,
+            border:`1px solid ${T.toggleBorder}`, background:T.toggleBg, cursor:"pointer",
+            fontSize:12, fontWeight:600, fontFamily:"inherit", color:T.text, textDecoration:"none",
+          }}>
+            🏝️ Spiele
+          </Link>
         </div>
       </div>
 
