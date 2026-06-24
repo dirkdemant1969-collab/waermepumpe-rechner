@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, Legend, ReferenceLine,
@@ -370,13 +369,72 @@ export default function App() {
     }}>{label}</button>
   );
 
+  // Eingabefeld mit lokalem Tipp-Zustand: erlaubt komplettes Leeren des Feldes,
+  // begrenzt erst beim Verlassen (onBlur) auf den erlaubten Bereich.
+  const NumberField = ({ value, onChange, min, max, step, color, width=84 }) => {
+    const c = color || T.accent;
+    const [draft, setDraft] = useState(null); // null = zeigt den echten value; sonst Tipp-Text
+    const shown = draft !== null ? draft : String(value);
+    const commit = (raw) => {
+      if (raw === "" || raw === "-") { setDraft(null); return; } // leer → zurück zum Wert
+      let v = parseFloat(String(raw).replace(",", "."));
+      if (isNaN(v)) { setDraft(null); return; }
+      if (v < min) v = min;
+      if (v > max) v = max;
+      onChange(v);
+      setDraft(null);
+    };
+    return (
+      <input
+        type="text" inputMode="decimal" value={shown}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={e => commit(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
+        onFocus={e => e.target.select()}
+        style={{ width, boxSizing:"border-box", textAlign:"right",
+          background:T.input, border:`1px solid ${c}55`, borderRadius:8,
+          padding:"4px 8px", color:c, fontSize:14, fontWeight:700,
+          fontFamily:"inherit", outline:"none" }} />
+    );
+  };
+
+  // Volle-Breite-Variante für die Einstellungen (Preise, Steigerung, Nebenkosten)
+  const NumberFieldFull = ({ value, onChange, min=0, max=Infinity, step, suffix, suffixWidth=28 }) => {
+    const [draft, setDraft] = useState(null);
+    const shown = draft !== null ? draft : String(value);
+    const commit = (raw) => {
+      if (raw === "") { onChange(0); setDraft(null); return; }
+      let v = parseFloat(String(raw).replace(",", "."));
+      if (isNaN(v)) { setDraft(null); return; }
+      if (v < min) v = min;
+      if (v > max) v = max;
+      onChange(v);
+      setDraft(null);
+    };
+    return (
+      <div style={{ position:"relative" }}>
+        <input type="text" inputMode="decimal" value={shown}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={e => commit(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
+          onFocus={e => e.target.select()}
+          style={{ ...INP, paddingRight:suffixWidth, marginBottom:4, fontWeight:700, fontSize:15 }} />
+        {suffix && <span style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-60%)",
+          fontSize:11, color:T.textFaint }}>{suffix}</span>}
+      </div>
+    );
+  };
+
   const Slider = ({ label, value, onChange, min, max, step, unit, color }) => {
     const c = color || T.accent;
     return (
       <div style={{ marginBottom:18 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
           <span style={LBL}>{label}</span>
-          <span style={{ fontSize:14, fontWeight:700, color:c }}>{fmtN(value)}{unit}</span>
+          <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+            <NumberField value={value} onChange={onChange} min={min} max={max} step={step} color={c} />
+            {unit && <span style={{ fontSize:12, fontWeight:600, color:T.textMuted, minWidth:18 }}>{unit.trim()}</span>}
+          </div>
         </div>
         <input type="range" min={min} max={max} step={step} value={value}
           onChange={e=>onChange(+e.target.value)} style={{ width:"100%", accentColor:c }} />
@@ -456,13 +514,14 @@ export default function App() {
       <div style={{ borderBottom:`1px solid ${T.headerBorder}`, padding:"14px 28px",
         display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12,
         background:T.header }}>
-        <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-          <div style={{ width:44, height:44, borderRadius:12,
-            background:"linear-gradient(135deg,#00e5a0,#00b4ff)",
-            display:"flex", alignItems:"center", justifyContent:"center", fontSize:21,
-            boxShadow:"0 0 18px rgba(0,229,160,0.35)" }}>♨️</div>
-          <div>
-            <div style={{ fontSize:19, fontWeight:800, background:"linear-gradient(90deg,#00b890,#0090d0)",
+        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+          <img src="/logo.png" alt="Dirk Demant – Heizung Sanitär Solar"
+            style={{ height:48, width:"auto",
+              background: isDark ? "transparent" : "#0a0a0a",
+              borderRadius: isDark ? 0 : 8,
+              padding: isDark ? 0 : "6px 10px" }} />
+          <div style={{ borderLeft:`1px solid ${T.divider}`, paddingLeft:16 }}>
+            <div style={{ fontSize:18, fontWeight:800, background:"linear-gradient(90deg,#00b890,#0090d0)",
               WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Wärmepumpen-Rechner</div>
             <div style={{ fontSize:11, color:T.textMuted, marginTop:1 }}>
               Kostenvergleich · KfW-Förderrechner · Amortisation · CO₂ · Prognose bis {2025+jahre}
@@ -492,14 +551,6 @@ export default function App() {
             <TabBtn id="foerderung"   label="🏦 Förderrechner" />
             <TabBtn id="einstellungen" label="⚙️ Einstellungen" />
           </div>
-
-          <Link to="/spiele" style={{
-            display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:20,
-            border:`1px solid ${T.toggleBorder}`, background:T.toggleBg, cursor:"pointer",
-            fontSize:12, fontWeight:600, fontFamily:"inherit", color:T.text, textDecoration:"none",
-          }}>
-            🏝️ Spiele
-          </Link>
         </div>
       </div>
 
@@ -932,13 +983,7 @@ export default function App() {
                     <label style={LBL}>{lbl}</label>
                     <span style={{ fontSize:10, color:T.textFaint }}>{hint}</span>
                   </div>
-                  <div style={{ position:"relative" }}>
-                    <input type="number" step="0.01" min="0" value={preise[k]}
-                      onChange={e=>setP(k, parseFloat(e.target.value)||0)}
-                      style={{ ...INP, paddingRight:28, marginBottom:4, fontWeight:700, fontSize:15 }} />
-                    <span style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-60%)",
-                      fontSize:11, color:T.textFaint }}>€</span>
-                  </div>
+                  <NumberFieldFull value={preise[k]} onChange={v=>setP(k,v)} min={0} step={0.01} suffix="€" />
                   <div style={{ fontSize:10, color:T.textFaint, marginBottom:12 }}>{rw}</div>
                 </div>
               ))}
@@ -999,16 +1044,11 @@ export default function App() {
                               <label style={{ fontSize:12, color:T.textSub, fontWeight:500 }}>{feldLabel}</label>
                               <span style={{ fontSize:10, color:T.textFaint }}>{einheit}</span>
                             </div>
-                            <div style={{ position:"relative" }}>
-                              <input type="number" step={feld==="netzentgelt_aufschlag"?"0.001":"1"} min="0"
-                                value={nk[typ][feld]}
-                                onChange={e=>setNkVal(typ, feld, e.target.value)}
-                                style={{ ...INP, paddingRight:36, marginBottom:14, fontWeight:700, fontSize:15 }} />
-                              <span style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-60%)",
-                                fontSize:10, color:T.textFaint }}>
-                                {einheit.replace("€/","").replace("/Jahr","").replace("J.","€")==="€"?"€":einheit}
-                              </span>
-                            </div>
+                            <NumberFieldFull value={nk[typ][feld]}
+                              onChange={v=>setNkVal(typ, feld, v)}
+                              min={0} step={feld==="netzentgelt_aufschlag"?0.001:1}
+                              suffix={einheit.replace("€/","").replace("/Jahr","").replace("J.","€")==="€"?"€":einheit}
+                              suffixWidth={36} />
                           </div>
                         ))}
                       </div>
@@ -1033,13 +1073,8 @@ export default function App() {
               {[["gas","🔥 Gas"],["oel","🛢️ Heizöl"],["nachtspeicher","⚡ Nachtspeicher"],["fernwaerme","🏭 Fernwärme"],["wp_strom","♨️ WP-Strom"]].map(([k,lbl])=>(
                 <div key={k}>
                   <label style={{ ...LBL, display:"block", marginBottom:5 }}>{lbl}</label>
-                  <div style={{ position:"relative" }}>
-                    <input type="number" step="0.5" min="0" max="20" value={steigerung[k]}
-                      onChange={e=>setS(k, parseFloat(e.target.value)||0)}
-                      style={{ ...INP, paddingRight:28, marginBottom:14, fontWeight:700, fontSize:15 }} />
-                    <span style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-60%)",
-                      fontSize:11, color:T.textFaint }}>%</span>
-                  </div>
+                  <NumberFieldFull value={steigerung[k]} onChange={v=>setS(k,v)} min={0} max={20} step={0.5} suffix="%" />
+                  <div style={{ marginBottom:14 }} />
                 </div>
               ))}
             </div>
@@ -1057,13 +1092,8 @@ export default function App() {
                     <label style={LBL}>{lbl}</label>
                     <span style={{ fontSize:10, color:T.textFaint }}>{hint}</span>
                   </div>
-                  <div style={{ position:"relative" }}>
-                    <input type="number" step="5" min="0" max="500" value={val}
-                      onChange={e=>setter(parseFloat(e.target.value)||0)}
-                      style={{ ...INP, paddingRight:38, marginBottom:14, fontWeight:700, fontSize:15 }} />
-                    <span style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-60%)",
-                      fontSize:11, color:T.textFaint }}>€/t</span>
-                  </div>
+                  <NumberFieldFull value={val} onChange={v=>setter(v)} min={0} max={500} step={5} suffix="€/t" suffixWidth={38} />
+                  <div style={{ marginBottom:14 }} />
                 </div>
               ))}
             </div>
