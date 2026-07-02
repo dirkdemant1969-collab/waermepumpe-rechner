@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Angebotsassistent – Dirk Demant</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f2f2f0;color:#1a1a18;min-height:100vh;font-size:14px}
+
+.topbar{background:#1a1a18;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.topbar-title{font-size:14px;font-weight:600}
+.topbar-sub{font-size:11px;color:#888;margin-top:1px}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.topbar-right label{font-size:11px;color:#888}
+.topbar-right input[type=password]{padding:5px 10px;border-radius:6px;border:1px solid #444;background:#2a2a28;color:#fff;font-size:12px;font-family:monospace;width:220px}
+.topbar-right input[type=number]{padding:5px 8px;border-radius:6px;border:1px solid #444;background:#2a2a28;color:#fff;font-size:12px;width:70px;text-align:right}
+.topbar-right button{background:#1a56db;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+.saved-hint{font-size:11px;color:#4ade80;display:none}
+
+.layout{display:grid;grid-template-columns:360px 1fr;min-height:calc(100vh - 48px)}
+@media(max-width:860px){.layout{grid-template-columns:1fr}}
+
+/* Sidebar */
+.sidebar{background:#fff;border-right:1px solid #e2e2e0;display:flex;flex-direction:column;max-height:calc(100vh - 48px);overflow:hidden}
+.sidebar-tabs{display:flex;border-bottom:1px solid #e2e2e0;flex-shrink:0}
+.stab{flex:1;padding:9px 4px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:none;font-family:inherit;color:#888;border-bottom:2px solid transparent}
+.stab.active{color:#1a56db;border-bottom-color:#1a56db}
+.sidebar-scroll{overflow-y:auto;flex:1;padding:10px}
+
+/* Artikel */
+.art-titel{font-size:11px;font-weight:700;color:#1a56db;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 5px;padding:4px 6px;background:#f0f6ff;border-radius:5px}
+.art-item{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:5px;padding:6px 8px;border:1px solid #ebebea;border-radius:6px;margin-bottom:3px;background:#fafaf8;cursor:pointer;transition:border-color .12s}
+.art-item:hover{border-color:#1a56db;background:#f0f6ff}
+.art-item.im-angebot{border-color:#1a56db;background:#e8f0fe}
+.art-item.alternativ{border-style:dashed;opacity:.8}
+.art-name{font-size:11px;color:#1a1a18;line-height:1.35}
+.art-einh{font-size:10px;color:#aaa}
+.art-preis{font-size:11px;font-weight:600;color:#1a56db;white-space:nowrap}
+.art-add{width:20px;height:20px;border-radius:50%;border:1.5px solid #1a56db;background:none;color:#1a56db;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;padding:0;line-height:1}
+.art-add:hover{background:#1a56db;color:#fff}
+.alt-badge{font-size:9px;color:#b45309;background:#fef3c7;border-radius:3px;padding:1px 4px;display:inline-block;margin-top:2px}
+
+/* Main */
+.main{display:flex;flex-direction:column;max-height:calc(100vh - 48px);overflow:hidden}
+.main-top{padding:12px 18px;border-bottom:1px solid #e2e2e0;background:#fff;flex-shrink:0}
+.main-top h2{font-size:13px;font-weight:600;margin-bottom:8px}
+.kundendaten{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kundendaten input{padding:7px 10px;border:1px solid #e2e2e0;border-radius:7px;font-size:13px;font-family:inherit;outline:none}
+.kundendaten input:focus{border-color:#1a56db}
+.main-scroll{overflow-y:auto;flex:1;padding:14px 18px}
+
+.lohn-banner{background:#f0f6ff;border:1px solid #c7d8f8;border-radius:8px;padding:8px 12px;font-size:12px;color:#1a56db;margin-bottom:10px}
+
+.pos-leer{text-align:center;padding:36px 20px;color:#bbb;font-size:13px;background:#fff;border-radius:10px;border:1px dashed #e2e2e0;margin-bottom:10px}
+
+/* Positionen-Tabelle mit Titelgruppen */
+.pos-wrap{background:#fff;border-radius:10px;border:1px solid #e2e2e0;overflow:hidden;margin-bottom:10px;display:none}
+.pos-wrap table{width:100%;border-collapse:collapse;font-size:12px}
+.pos-wrap thead tr{background:#f7f7f6}
+.pos-wrap th{padding:7px 8px;text-align:left;font-weight:600;color:#999;font-size:10px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #e2e2e0}
+.pos-wrap th.r{text-align:right}
+.pos-wrap td{padding:7px 8px;border-bottom:1px solid #f2f2f0;vertical-align:middle}
+.pos-wrap tbody tr:last-child td{border-bottom:none}
+.titel-row td{background:#f0f6ff;font-weight:700;font-size:11px;color:#1a56db;padding:5px 8px;border-bottom:1px solid #dce8fc}
+.pos-bez{font-size:12px}
+.lohn-cell{font-size:10px;color:#b45309;margin-top:2px}
+.num-input{width:56px;padding:3px 5px;border:1px solid #e2e2e0;border-radius:5px;text-align:center;font-size:11px;font-family:inherit;outline:none}
+.num-input:focus{border-color:#1a56db}
+.min-input{width:54px;padding:3px 5px;border:1px solid #f8c55a;border-radius:5px;text-align:center;font-size:11px;font-family:inherit;outline:none;background:#fffdf0}
+.min-input:focus{border-color:#e8a800}
+.del-btn{background:none;border:none;color:#ddd;cursor:pointer;font-size:13px;padding:1px 5px;border-radius:4px}
+.del-btn:hover{color:#e53e3e;background:#fff0f0}
+td.r{text-align:right}
+tr.alt-row td{background:#fffdf0}
+
+.summen-wrap{background:#fff;border-radius:10px;border:1px solid #e2e2e0;padding:12px 16px;margin-bottom:10px;display:none}
+.summen-wrap table{width:100%;font-size:13px}
+.summen-wrap td{padding:4px 0}
+.summen-wrap td:last-child{text-align:right;font-weight:500}
+.summen-wrap .lohn-row td{color:#b45309;font-size:12px}
+.summen-wrap .total td{font-size:15px;font-weight:700;border-top:1px solid #e2e2e0;padding-top:9px}
+.summen-wrap .total td:last-child{color:#1a56db}
+
+.btn{padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+.btn-primary{background:#1a56db;color:#fff}
+.btn-primary:hover{background:#1446c0}
+.btn-outline{background:#fff;color:#1a1a18;border:1px solid #ddd}
+.btn-outline:hover{background:#f4f4f2}
+.btn-danger{background:#fff;color:#e53e3e;border:1px solid #fca5a5}
+.btn-danger:hover{background:#fff0f0}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+
+/* Preview / Angebot */
+.preview{background:#fff;border-radius:10px;border:1px solid #e2e2e0;padding:24px;display:none}
+.preview.show{display:block}
+.pv-kopf{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.pv-kopf p{font-size:12px;line-height:1.9}
+.pv-kopf .name{font-weight:700;font-size:13px}
+.pv-kopf .kunde{text-align:right}
+.pv-titel{font-size:18px;font-weight:700;margin-bottom:3px}
+.pv-meta{font-size:12px;color:#888;margin-bottom:14px}
+.pv table{width:100%;border-collapse:collapse;font-size:11px}
+.pv thead tr{background:#f7f7f6}
+.pv th{padding:7px 8px;text-align:left;font-weight:600;color:#888;border-bottom:1px solid #e2e2e0;font-size:10px}
+.pv th.r,.pv td.r{text-align:right}
+.pv td{padding:8px 8px;border-bottom:1px solid #f2f2f0;vertical-align:top}
+.pv tbody tr:last-child td{border-bottom:none}
+.pv .titel-row td{background:#f0f6ff;font-weight:700;font-size:11px;color:#1a56db;padding:5px 8px}
+.pv .subtotal-row td{background:#f9f9f8;font-weight:600;font-size:11px;text-align:right;padding:5px 8px;color:#444;border-top:1px solid #e2e2e0}
+.lohn-note{font-size:10px;color:#b45309;margin-top:2px}
+.pv-summen{display:flex;justify-content:flex-end;margin-top:14px;padding-top:14px;border-top:1px solid #e2e2e0}
+.pv-summen table{min-width:260px;font-size:13px}
+.pv-summen td{padding:4px 8px}
+.pv-summen td:last-child{text-align:right;font-weight:500}
+.pv-summen .ptotal td{font-weight:700;font-size:15px;border-top:1px solid #e2e2e0;padding-top:8px}
+.pv-footer{margin-top:14px;padding-top:12px;border-top:1px solid #e2e2e0;font-size:11px;color:#888;line-height:1.9}
+.pv-unterschrift{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;font-size:11px;color:#888}
+.pv-unterschrift div{border-top:1px solid #ccc;padding-top:4px}
+
+.loading-bar{background:#e8f0fe;border-radius:8px;padding:10px 14px;color:#1a56db;font-size:12px;display:none;align-items:center;gap:10px;margin-bottom:10px}
+.loading-bar.show{display:flex}
+.spinner{width:16px;height:16px;border:2px solid #c7d8f8;border-top-color:#1a56db;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media print{
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .topbar,.sidebar,.main-top,.btn-row,.loading-bar,.pos-wrap,.summen-wrap,.lohn-banner,.art-liste,.sidebar-tabs{display:none!important}
+  .layout{display:block!important}
+  .main{display:block!important;max-height:none!important;overflow:visible!important}
+  .main-scroll{overflow:visible!important;padding:0!important}
+  .preview{display:block!important;border:none!important;padding:0!important;border-radius:0!important}
+  .preview.show{display:block!important}
+  body{background:#fff!important;font-size:11pt}
+  .pv-kopf{display:grid!important;grid-template-columns:1fr 1fr}
+  .pv table{font-size:10pt}
+  .titel-row td{background:#e8f0fe!important}
+  .subtotal-row td{background:#f9f9f8!important}
+  @page{margin:15mm;size:A4}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-title">Angebotsassistent · Dirk Demant Heizung, Sanitär &amp; Solar</div>
+    <div class="topbar-sub">Artikel auswählen · Mengen &amp; Minuten eintragen · Angebot drucken</div>
+  </div>
+  <div class="topbar-right">
+    <label>Stundensatz €:</label>
+    <input type="number" id="stundensatz" value="85" min="1" step="1" onchange="updateAlles()">
+    <label>API-Key:</label>
+    <input type="password" id="api-key" placeholder="sk-ant-... (optional)">
+    <button onclick="saveSettings()">Speichern</button>
+    <span class="saved-hint" id="saved-hint">✓ Gespeichert</span>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-tabs">
+      <button class="stab active" onclick="showSTab('wp',this)">🔥 Wärmepumpe / Heizung</button>
+      <button class="stab" onclick="showSTab('san',this)">🚿 Sanitär / Bad</button>
+    </div>
+    <div class="sidebar-scroll" id="art-liste"></div>
+  </div>
+
+  <div class="main">
+    <div class="main-top">
+      <h2>Angebot zusammenstellen</h2>
+      <div class="kundendaten">
+        <input type="text" id="kundenname" placeholder="Kundenname">
+        <input type="text" id="adresse" placeholder="Adresse, PLZ Ort">
+      </div>
+    </div>
+    <div class="main-scroll">
+      <div class="lohn-banner">⏱ Stundensatz: <strong id="lohn-info">85,00 € / Std. = 1,42 € / Min.</strong> &nbsp;·&nbsp; Minuten in der <span style="background:#fffdf0;border:1px solid #f8c55a;border-radius:3px;padding:0 4px">gelben Spalte</span> eintragen &nbsp;·&nbsp; <span style="background:#fef3c7;border-radius:3px;padding:0 4px;color:#b45309">Alternativ-Positionen</span> zählen nicht in die Summe</div>
+
+      <div class="pos-leer" id="pos-leer">← Artikel aus der linken Liste anklicken</div>
+
+      <div class="pos-wrap" id="pos-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:52px">Pos.</th>
+            <th>Bezeichnung</th>
+            <th class="r" style="width:58px">Menge</th>
+            <th class="r" style="width:44px">Einh.</th>
+            <th class="r" style="width:58px" title="Arbeitsminuten">⏱ Min.</th>
+            <th class="r" style="width:78px">E-Preis</th>
+            <th class="r" style="width:82px">G-Preis</th>
+            <th style="width:26px"></th>
+          </tr></thead>
+          <tbody id="pos-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="summen-wrap" id="summen-wrap">
+        <table>
+          <tr><td style="color:#888">Material / Leistung (netto)</td><td id="s-material"></td></tr>
+          <tr class="lohn-row"><td>⏱ Arbeitslohn (netto)</td><td id="s-lohn"></td></tr>
+          <tr><td style="color:#888;font-weight:600">Netto-Summe</td><td id="s-netto" style="font-weight:600"></td></tr>
+          <tr><td style="color:#888">zzgl. 19 % MwSt.</td><td id="s-mwst"></td></tr>
+          <tr class="total"><td>Gesamt-Betrag</td><td id="s-brutto"></td></tr>
+        </table>
+      </div>
+
+      <div class="loading-bar" id="loading-bar"><div class="spinner"></div><span>KI generiert Angebots-Titel...</span></div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="erstelleAngebot()">📄 Angebot erstellen</button>
+        <button class="btn btn-outline" id="print-btn" onclick="druckeAngebot()" style="display:none">🖨 Als PDF speichern / Drucken</button>
+        <button class="btn btn-danger" onclick="resetAlles()">✕ Zurücksetzen</button>
+      </div>
+
+      <div class="preview" id="preview"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const FIRMA={name:"Dirk Demant Heizung, Sanitär & Solar",strasse:"Kaiserswerther Str. 156",ort:"47249 Duisburg",tel:"(0203) 44 96 59 05",email:"info@demant.de",iban:"DE12 5706 9144 0100 1755 48",bic:"GENODED1KAI",ustid:"DE312707994",steuernr:"109/5037/3394"};
+
+// ─── ARTIKEL MIT TITELSTRUKTUR ──────────────────────────────────
+const ARTIKEL = {
+  wp: [
+    // Titel 01: Demontage
+    {titel:"Titel 01: Demontage", items:[
+      {id:"wp_d1",name:"Demontage und fachgerechter Rückbau der bestehenden Heizungsanlage zur Vorbereitung der neuen Wärmepumpenanlage",e:"psl.",p:594.20},
+    ]},
+    // Titel 02: Wärmepumpe — VAILLANT
+    {titel:"Titel 02: Wärmepumpe — Vaillant aroTHERM plus /8.1", items:[
+      {id:"va1",name:"VA Paket 4.3111 aroTHERM plus /8.1 — VWL 35/8.1 A 230V mit VWZ MEH 97/7",e:"Stück",p:10209.36},
+      {id:"va2",name:"VA Paket 4.3112 aroTHERM plus /8.1 — VWL 55/8.1 A 230V mit VWZ MEH 97/7",e:"Stück",p:10786.86},
+      {id:"va3",name:"VA Paket 4.3113 aroTHERM plus /8.1 — VWL 75/8.1 A 230V mit VWZ MEH 97/7",e:"Stück",p:11875.86},
+      {id:"va4",name:"VA Paket 4.3114 aroTHERM plus /8.1 — VWL 105/8.1 A 400V mit VWZ MEH 97/7",e:"Stück",p:14868.96},
+      {id:"va5",name:"VA Paket 4.3115 aroTHERM plus /8.1 — VWL 125/8.1 A 400V mit VWZ MEH 97/7",e:"Stück",p:16263.21},
+    ]},
+    // Titel 02: Wärmepumpe — MHG
+    {titel:"Titel 02: Wärmepumpe — MHG ecoWP 2Xe", items:[
+      {id:"mhg1",name:"MHG Paket ecoWP 2Xe 6 Wärmepumpe mit Zubehör",e:"Stück",p:9429.81},
+      {id:"mhg2",name:"MHG Paket ecoWP 2Xe 8 Wärmepumpe mit Zubehör",e:"Stück",p:9116.70},
+      {id:"mhg3",name:"MHG Paket ecoWP 2Xe 12 Wärmepumpe mit Zubehör",e:"Stück",p:9716.70},
+    ]},
+    // Titel 03: Pufferspeicher
+    {titel:"Titel 03: Pufferspeicher", items:[
+      {id:"ps1",name:"Kospel Pufferspeicher SVH-50 — Liefern und montieren",e:"Stück",p:506.65},
+      {id:"ps2",name:"Kospel Pufferspeicher SVH-80 — Liefern und montieren",e:"Stück",p:527.92},
+      {id:"ps3",name:"Kospel Pufferspeicher SVH-100 — Liefern und montieren",e:"Stück",p:563.35},
+    ]},
+    // Titel 04: Zubehör
+    {titel:"Titel 04: Zubehör", items:[
+      {id:"z1",name:"VA Dämpfungssockel 60cm (MVP:2St) für aroTHERM / aroTHERM Split",e:"Stück",p:292.97},
+      {id:"z2",name:"VA Montage-Set für Bodenanschluss mit EnEV konformer Dämmschale",e:"Stück",p:596.57},
+      {id:"z3",name:"VA Verlängerung Montageset Bodenanschluss aroTHERM plus EnEV konform",e:"Stück",p:245.94},
+      {id:"z4",name:"Heizkreisset Easyflow DN25 (1\") ungemischt, Wilo Para 25/6",e:"Stk.",p:486.17},
+      {id:"z4a",name:"Heizkreisset Easyflow DN25 (1\") ungemischt mit Durchflussmesser, Wilo Para 25/6",e:"Stk.",p:538.46,alternativ:true},
+      {id:"z5",name:"Heizkreisset Easyflow DN25 (1\") 3-Wege-Mischer, Stellmotor, Wilo Para 25/6",e:"Stk.",p:717.83,alternativ:true},
+      {id:"z6",name:"Modulverteilergruppe Easyflow 1×Direktkreis, 1×Mischkreis, Typ DiMi25",e:"Stk.",p:1315.23,alternativ:true},
+      {id:"z7",name:"Modulverteilergruppe Easyflow 2×Mischkreis, Typ MiMi25",e:"Stk.",p:1483.32,alternativ:true},
+      {id:"z8",name:"Wandhalter für Heizkreisset DN25, 100/150mm",e:"Stk.",p:85.45},
+      {id:"z9",name:"Basispaket Wärmepumpe inkl. Liefern und Montieren",e:"Stück",p:3431.67},
+      {id:"z10",name:"Frostschutzventil Easyflow 791, 28mm Klemmanschluss",e:"Stk.",p:128.15},
+      {id:"z11",name:"Dämmbox KH zu Easyflow 791 28mm Klemmanschluss",e:"Stk.",p:54.25},
+      {id:"z12",name:"Caleffi Schlammabscheider DIRTMAG 28mm Klemmring",e:"Stück",p:170.95},
+      {id:"z13",name:"Caleffi Isolierung f. DIRTMAG Abscheider 22mm KRV 1\" IG",e:"Stück",p:39.98},
+      {id:"z14",name:"Comfort Membran-Druckausdehnungsgefäß MAG-H 35 Vordruck 1,5 bar",e:"Stück",p:142.88},
+      {id:"z15",name:"Comfort Kappenventil DN20 (3/4\") für Membran-Ausdehnungsgefäße",e:"Stück",p:25.85},
+      {id:"z16",name:"Comfort Kesselsicherheitsgruppe KSG DN25 (1\") bis 50 kW, Messing",e:"Stück",p:89.01},
+      {id:"z17",name:"GB Füllstrecke thermaliQ: FB2",e:"Stück",p:728.50,alternativ:true},
+      {id:"z18",name:"Grünbeck Weichwasserpatrone — Heizungsanlage nach VDI 2035 befüllen",e:"l",p:0.45},
+      {id:"z19",name:"Montage- und Kleinmaterial — Abrechnung im Nachweis",e:"Stück",p:597.89},
+      {id:"z20",name:"MHG heatapp! WLAN-Stick",e:"Stück",p:103.51},
+    ]},
+    // Titel 05: Warmwasser Speicher
+    {titel:"Titel 05: Warmwasser Speicher", items:[
+      {id:"ww1",name:"Kospel WW-Speicher SWP-201 emailliert (o. R), 1 Wärmetauscher — Liefern und montieren",e:"Stk.",p:1978.23},
+      {id:"ww2",name:"Kospel WW-Speicher SWP-301 emailliert (o. R), 1 Wärmetauscher — Liefern und montieren",e:"Stk.",p:2128.38},
+      {id:"ww3",name:"VA uniSTOR excl. VIH RW 300/4 BS Edelstahl WW-Speicher 300 l — Liefern und montieren",e:"Stück",p:3131.33},
+      {id:"ww4",name:"MHG Edelstahlspeicher WPS200-E2, TWW für Wärmepumpe, 200 l",e:"Stück",p:2609.61},
+      {id:"ww5",name:"MHG Edelstahlspeicher WPS300-E2, TWW für Wärmepumpe, 300 l",e:"Stück",p:3046.12},
+      {id:"ww6",name:"MHG Warmwasser-Wärmepumpe VT3151 300L",e:"Stück",p:5002.43},
+    ]},
+    // Titel 06: Warmwasserzubehör
+    {titel:"Titel 06: Warmwasserzubehör", items:[
+      {id:"wwz1",name:"STREAM Sicherheitscenter DN 20, 12 l mit MAG f. 6/8/10 bar CONEL",e:"Stück",p:375.13},
+      {id:"wwz2",name:"Zirkulationspumpenset EV ZUP 15 Plus mit Anschluss-Set und Spüleinrichtung",e:"Stk.",p:223.90},
+      {id:"wwz3",name:"Anschluss-Set mit Spüleinrichtung für Zirkulationspumpen DN15 (1/2\")",e:"Stk.",p:96.00,alternativ:true},
+      {id:"wwz4",name:"Wilo Verschraubung Messing R1/2 /d 15 i × G 1 i (1 Satz)",e:"Stück",p:45.24,alternativ:true},
+      {id:"wwz5",name:"Montage- und Kleinmaterial — Liefern und montieren",e:"psl.",p:2019.20},
+    ]},
+    // Titel 07: Hydraulischer Abgleich
+    {titel:"Titel 07: Hydraulischer Abgleich", items:[
+      {id:"ha1",name:"Berechnung der Heizlast nach DIN: Räume messen, Heizflächen berechnen",e:"psl.",p:516.89},
+      {id:"ha2",name:"Errechneten Abgleich einstellen",e:"psl.",p:119.85},
+      {id:"ha3",name:"Heimeier-Thermostatventil mit Voreinstellung — Material und Einbau inklusive",e:"Stück",p:95.77},
+    ]},
+    // Titel 08: Heizflächenveränderung
+    {titel:"Titel 08: Heizflächenveränderung", items:[
+      {id:"hf1",name:"Heizkörper erneuern (wird bei Auftragserteilung genau auf Maß definiert) — Liefern und montieren",e:"Stück",p:598.59,alternativ:true},
+    ]},
+    // Titel 09: Elektroarbeit
+    {titel:"Titel 09: Elektroarbeit", items:[
+      {id:"el1",name:"Verdrahtung WP — Hausschaltschrank, erforderliche Automaten nach Herstellervorgabe",e:"Stück",p:2395.20},
+      {id:"el2",name:"Verdrahtung WP + zusätzlicher Zählerplatz für Wärmepumpen-Tarif",e:"Stück",p:3799.00,alternativ:true},
+      {id:"el3",name:"Verdrahtung WP — Hausschaltschrank erneuern/erweitern + Zählerplatz WP-Tarif",e:"Stück",p:5017.80,alternativ:true},
+    ]},
+    // Titel 10: Erdarbeiten
+    {titel:"Titel 10: Erdarbeiten", items:[
+      {id:"er1",name:"Fundament erstellen inklusive Erdarbeiten",e:"psl.",p:1044.36},
+      {id:"er2",name:"Anbindung Außeneinheit bis 3 m bis zur Kernbohrung — Liefern und montieren",e:"psl.",p:2351.10},
+      {id:"er3",name:"Anbindung Außeneinheit bis 3 m bis zur Kernbohrung, Leitungsführung im Erdreich",e:"Stück",p:2040.56,alternativ:true},
+    ]},
+  ],
+  san: [
+    {titel:"Demontage", items:[
+      {id:"d1",  name:"Demontage von Waschtisch, Spiegel, Ablage und sonstigem Zubehör — inkl. Entsorgung, Sichern und Abstopfen",e:"Stk.",p:106.65},
+      {id:"d2",  name:"Demontage von Badmöbelschränken — inkl. Entsorgung, Sichern und Abstopfen",e:"Stk.",p:159.97},
+      {id:"d3",  name:"Demontage Badewanne inkl. Duschabtrennung, Armatur, Duschstange — inkl. Entsorgung",e:"Stk.",p:213.30},
+      {id:"d4",  name:"Demontage Duschwanne inkl. Duschabtrennung, Armatur, Duschstange — inkl. Entsorgung",e:"Stk.",p:159.97},
+      {id:"d5",  name:"Zulage Demontage Unterputzarmaturen Wanne/Dusche — inkl. Sichern und Abstopfen",e:"Stk.",p:53.33},
+      {id:"d6",  name:"Demontage Bidet — inkl. Entsorgung, Sichern und Abstopfen",e:"Stk.",p:106.65},
+      {id:"d7",  name:"Demontage Durchlauferhitzer — inkl. Entsorgung, Sichern und Abstopfen",e:"Stk.",p:53.33},
+      {id:"d8",  name:"Demontage UP-Ventil-Oberteil oder UP-Wasserzähler — inkl. Sichern und Abstopfen",e:"Stk.",p:53.33},
+      {id:"d9",  name:"Stemmen Bestandsestrich bis Rohdecke — inkl. Entsorgung und Endreinigung",e:"m²",p:84.51},
+      {id:"d10", name:"Schneiden und Stemmen Bestandsestrich bis Dämmschicht für bodenebene Dusche",e:"Stk.",p:79.99},
+      {id:"d11", name:"Abkleben Zuweg Wohnung mit Malerfolie/Filzpappe inkl. Türfugen mit Kreppband",e:"Pausch.",p:213.30},
+      {id:"d12", name:"Abkleben Treppenhaus zur Wohnung je Etage mit Malerfolie/Filzpappe inkl. Reinigung",e:"Stk.",p:106.65},
+      {id:"d13", name:"Staubdichte Schutzwand erstellen inkl. Unterhaltung, Beseitigung und Entsorgung",e:"Pausch.",p:213.30},
+      {id:"d14", name:"Umluftgerät Einsatz zur Feinstaubreduzierung",e:"Pausch.",p:444.38},
+      {id:"d15", name:"Aufzugskabine auskleiden mit Pappe/Spanplatte inkl. Entsorgung und Endreinigung",e:"Pausch.",p:159.97},
+      {id:"d16", name:"Projektsteuerung, Terminplanung, Koordination Gewerke, Aufmaß und Abrechnung",e:"Pausch.",p:213.30},
+      {id:"d17", name:"Demontage WC-Anlage — inkl. Entsorgung, Sichern und Abstopfen",e:"Stk.",p:106.65},
+      {id:"d18", name:"Demontage UP-Spülkasten / Trageelemente — inkl. Entsorgung, Sichern und Abstopfen",e:"Stk.",p:159.97},
+      {id:"d19", name:"Demontage Badezimmerlüfter — inkl. Sichern und Abstopfen",e:"Stk.",p:53.33},
+      {id:"d20", name:"Wandfliesenbelag einschl. Kleberschicht entfernen — inkl. Entsorgung",e:"m²",p:53.33},
+      {id:"d21", name:"Bodenfliesenbelag einschl. Kleberschicht entfernen — inkl. Entsorgung",e:"m²",p:99.67},
+      {id:"d22", name:"Abtransport Baumischschutt KFZ/Anhänger bis 4 m³ — inkl. Entsorgung",e:"Pausch.",p:614.48},
+      {id:"d23", name:"Alttapete vollflächig entfernen, Flächen malerfertig vorbereiten",e:"m²",p:14.58},
+      {id:"d24", name:"Heizkörper demontieren — inkl. Sichern und Abstopfen",e:"Stk.",p:106.65},
+      {id:"d25", name:"Rohrverkastung aus Gipskarton demontieren — inkl. Entsorgung",e:"m",p:52.02},
+      {id:"d26", name:"Vorsatzschale / nicht tragende Wand GK/Porenbeton demontieren — inkl. Entsorgung",e:"m²",p:130.03},
+      {id:"d27", name:"Abhangdecke aus Gipskarton demontieren — inkl. Entsorgung",e:"m²",p:79.99},
+    ]},
+    {titel:"Vormontage", items:[
+      {id:"v1",  name:"Leitungsanpassung Wasser/Abwasser für AP-Duscharmatur — inkl. Ausrichten und Sichern",e:"Stk.",p:502.71},
+      {id:"v2",  name:"Zulage Montage UP-Armaturen Badewanne — inkl. Ausrichten und Sichern",e:"Stk.",p:523.09},
+      {id:"v3",  name:"Duschrinnenablauf für bodenebene Dusche einbauen",e:"Stk.",p:133.31},
+      {id:"v4",  name:"Heizkörper versetzen bis 2 m — inkl. Ausrichten, Festsetzen und Sichern",e:"Stk.",p:420.42},
+      {id:"v5",  name:"Grundmodul Wasser- und Abwasser inkl. Neuverlegung aller Leitungen",e:"Pausch.",p:1658.91},
+      {id:"v6",  name:"Leitungsanpassung Wasser/Abwasser für Waschtisch — inkl. Ausrichten und Sichern",e:"Stk.",p:513.95},
+      {id:"v7",  name:"Leitungsanpassung Wasser/Abwasser für WC mit Spülkasten",e:"Stk.",p:479.54},
+      {id:"v8",  name:"Leitungsanpassung Zuleitung für Urinal — inkl. Ausrichten und Sichern",e:"Stk.",p:420.18},
+      {id:"v9",  name:"Leitungsanpassung Zuleitung für Bidet — inkl. Ausrichten und Sichern",e:"Stk.",p:478.40},
+      {id:"v10", name:"Verlegung Fußbodenheizung pro m² inkl. Dämmung und Randdämmstreifen",e:"m²",p:171.13},
+      {id:"v11", name:"USH Mattenbox Vario-Design 2×8 f.1 Matte mit Abdeckplatte",e:"Stk.",p:561.87},
+      {id:"v12", name:"Leitungsanpassung Wasser/Abwasser für Waschmaschine",e:"Stk.",p:420.18},
+      {id:"v13", name:"Leitungsanpassung Zuleitung für Durchlauferhitzer — inkl. Ausrichten und Sichern",e:"Stk.",p:422.08},
+      {id:"v14", name:"Leitungsanpassung Wasser/Abwasser für Küche — inkl. Ausrichten und Sichern",e:"Stk.",p:692.51},
+      {id:"v15", name:"Leitungsanpassung Wasser/Abwasser für AP-Duscharmatur (2. Anschluss)",e:"Stk.",p:502.71},
+      {id:"v16", name:"Zulage Montage UP-Armaturen Dusche — inkl. Ausrichten und Sichern",e:"Stk.",p:258.12},
+      {id:"v17", name:"Heizungsanlage entleeren, befüllen und entlüften (je Geschoss)",e:"Stk.",p:106.65},
+    ]},
+    {titel:"Zwischenmontage", items:[
+      {id:"z1", name:"Zulage Anschluss Ab-, Über- und Einlaufgarnitur",e:"Stk.",p:35.55},
+      {id:"z2", name:"Brausewanne schallentkoppelt aufstellen, Ab-/Überlaufgarnitur montieren inkl. Dichtheitsprüfung",e:"Stk.",p:319.95},
+      {id:"z3", name:"Badewanne schallentkoppelt aufstellen, Ab-/Überlaufgarnitur montieren inkl. Dichtheitsprüfung",e:"Stk.",p:639.90},
+      {id:"z4", name:"Zulage Montage Wanne in Übergröße",e:"Stk.",p:213.30},
+    ]},
+    {titel:"Fertigmontage", items:[
+      {id:"f1",  name:"AP- oder UP-Wannenarmatur mit Brausegarnitur und Ablaufset montieren",e:"Stk.",p:106.65},
+      {id:"f2",  name:"Heizkörper montieren inkl. befüllen und entlüften",e:"Stk.",p:213.30},
+      {id:"f3",  name:"Waschtischunterschrank / Halbschale / Säule / Badmöbelschrank / Spiegel montieren",e:"Stk.",p:79.99},
+      {id:"f4",  name:"Waschtischanlage komplett montieren inkl. Armatur, Eckventile, Siphon, Ablage und Spiegel",e:"Stk.",p:213.30},
+      {id:"f5",  name:"Accessoires montieren (Handtuchhalter, Glashalter, Seifenhalter, Rollenhalter, Wannengriff etc.)",e:"Stk.",p:26.66},
+      {id:"f6",  name:"Wandhängendes WC / Stand-WC mit Spülkasten oder Drucktaste inkl. WC-Deckel montieren",e:"Stk.",p:213.30},
+      {id:"f7",  name:"Bidet mit allen Bestandteilen montieren",e:"Stk.",p:159.97},
+      {id:"f8",  name:"Brausestange montieren",e:"Stk.",p:26.66},
+      {id:"f9",  name:"Waschmaschinenanschluss montieren (Zapfventil und Siphon)",e:"Stk.",p:79.99},
+      {id:"f10", name:"Durchlauferhitzer montieren, wasserseitig anschließen, ggf. Verlängerungen",e:"Stk.",p:79.99},
+      {id:"f11", name:"Küchenarmatur und Küchenabfluss nach Leitungserneuerung anschließen",e:"Stk.",p:79.99},
+      {id:"f12", name:"Duschabtrennung ohne Seitenteil montieren",e:"Stk.",p:426.60},
+      {id:"f13", name:"Brausewannenarmatur inkl. Brausegarnitur / Fertigmontageset UP-Armatur montieren",e:"Stk.",p:106.65},
+      {id:"f14", name:"Duschabtrennung Seitenteil montieren",e:"Stk.",p:319.95},
+      {id:"f15", name:"Duschabtrennung als Sonderanfertigung / rahmenlos vor Ort aufmessen und skizzieren",e:"Stk.",p:213.30},
+      {id:"f16", name:"Zulage Duschabtrennung Sondergröße oder besondere Montageschwierigkeiten",e:"Stk.",p:213.30},
+    ]},
+    {titel:"Estricharbeiten", items:[
+      {id:"e1", name:"Schwimmender Schnellestrich aufbringen inkl. aller Vorarbeiten",e:"m²",p:91.80},
+      {id:"e2", name:"Gefälleestrich für bodenebene Dusche aufbringen inkl. aller Vorarbeiten",e:"Stk.",p:114.75},
+    ]},
+    {titel:"Fliesenarbeiten", items:[
+      {id:"fl1",  name:"Abkastung Badewanne mit revisionsfähigen Hartschaumelementen erstellen",e:"Stk.",p:109.01},
+      {id:"fl2",  name:"Rohrdurchführungen, Zu- und Abläufe mit Dichtmanschetten abdichten",e:"Stk.",p:6.22},
+      {id:"fl3",  name:"Abgestemmte Wandfläche zur Aufnahme von Wandfliesen aufarbeiten (Q2)",e:"m²",p:24.39},
+      {id:"fl4",  name:"Wandfläche oberhalb abgestemmter Fliesen aufputzen (Q2)",e:"m²",p:24.39},
+      {id:"fl5",  name:"Alte Fliesenflächen spachteln und schleifen (Q2)",e:"m²",p:23.90},
+      {id:"fl6",  name:"Fläche oberhalb alter Fliesen mit Hartschaum/GK ausgleichen bis 25 mm (Q2)",e:"m²",p:50.61},
+      {id:"fl7",  name:"Abkastung Duschtasse mit revisionsfähigen Hartschaumelementen erstellen",e:"Stk.",p:55.08},
+      {id:"fl8",  name:"Revisionsöffnung erstellen",e:"Stk.",p:29.27},
+      {id:"fl9",  name:"Vorwand bis max. 1,35 m erstellen (Oberflächengüte Q2)",e:"Stk.",p:81.00},
+      {id:"fl10", name:"Wandfliesen keramisch bis 30x60 cm verlegen (hydraulisch enthaerteter Duennbettmoertel)",e:"m²",p:48.29},
+      {id:"fl11", name:"Fliesenmaterial an Rohr-/Leitungsdurchfuehrungen und Sanitaergegenstaenden anarbeiten",e:"Stk.",p:9.11},
+      {id:"fl12", name:"Naturstein / Feinsteinzeug / Glasmosaik an Durchfuehrungen anarbeiten",e:"Stk.",p:15.62},
+      {id:"fl13", name:"Eckschienen aus Kunststoff einarbeiten",e:"m",p:13.77},
+      {id:"fl14", name:"Eckschienen aus Edelstahl einarbeiten",e:"m",p:24.10},
+      {id:"fl15", name:"Eckschienen aus eloxiertem Aluminium einarbeiten",e:"m",p:16.07},
+      {id:"fl16", name:"Elektrische Fussbodenheizung in Fliesenkleber verlegen, ebenes Abspachteln",e:"m²",p:5.54},
+      {id:"fl17", name:"Estrich von Moertelresten und Rueckstaenden abschleifen inkl. Entsorgung",e:"m²",p:10.91},
+      {id:"fl18", name:"Gehrungskante zum Ablussprofil einer Fliesenkante erstellen",e:"m",p:29.70},
+      {id:"fl19", name:"Eckschienen Material (Kalkulationsgrundlage)",e:"m",p:16.20},
+      {id:"fl20", name:"Zulage Schleifen und Polieren Naturstein/Feinsteinzeug-Kante (Gehrung)",e:"m",p:8.10},
+      {id:"fl21", name:"Spritzbereich Duschen und Wannen abdichten nach DIN 18534",e:"m²",p:29.17},
+      {id:"fl22", name:"Boden Feinsteinzeug ab 30x60 cm verlegen",e:"m²",p:160.65},
+      {id:"fl23", name:"Zulage Diagonalverlegung",e:"m²",p:27.00},
+      {id:"fl24", name:"Alte Fliesenflaeche fuer Neuverfliesung / Putzflaeche vorbereiten (Q2)",e:"m²",p:35.55},
+    ]},
+    {titel:"Mauerwerks- und Putzarbeiten", items:[
+      {id:"p1", name:"Ausbessern Aufbrueche im Putz nach Neuverlegung Elektroleitungen",e:"Pausch.",p:183.60},
+      {id:"p2", name:"Ausbessern Aufbrueche im Putz nach Neuverlegung sanitaerer Leitungen",e:"Pausch.",p:80.33},
+      {id:"p3", name:"Podest aus Porenbeton erstellen max. 20 cm",e:"m²",p:114.75},
+      {id:"p4", name:"Podest aus Porenbeton erstellen",e:"m³",p:791.78},
+    ]},
+    {titel:"Trockenbau", items:[
+      {id:"t1", name:"Rohrabkastung in Trockenbauweise erstellen (1x 1,25 cm je Seite)",e:"m",p:57.14},
+      {id:"t2", name:"Heizkoerpernische in Trockenbauweise schliessen",e:"Stk.",p:95.62},
+      {id:"t3", name:"Gipskartondecke erstellen inkl. Unterkonstruktion 1x 1,25 cm fuer Feuchtraeume",e:"m²",p:91.80},
+      {id:"t4", name:"Vorhandene Abhangdecke aus Gipskarton aufarbeiten",e:"m²",p:29.70},
+    ]},
+    {titel:"Malerarbeiten", items:[
+      {id:"m1", name:"Holztuer einseitig streichen",e:"Stk.",p:162.00},
+      {id:"m2", name:"Holztuer beidseitig streichen",e:"Stk.",p:297.00},
+      {id:"m3", name:"Holzzarge streichen",e:"Stk.",p:67.50},
+      {id:"m4", name:"Stahlzarge streichen",e:"Stk.",p:67.50},
+      {id:"m5", name:"Holzfenster einseitig lackieren",e:"Stk.",p:148.50},
+      {id:"m6", name:"Alttapete entfernen",e:"m²",p:8.78},
+      {id:"m7", name:"Wandflaeche verspachteln Q4 und mit Dispersionsfarbe streichen",e:"m²",p:47.25},
+      {id:"m8", name:"Deckenflaeche verspachteln Q4 und mit Dispersionsfarbe streichen",e:"m²",p:47.25},
+      {id:"m9", name:"Deckenflaeche verputzen mit Mineralputz und streichen nach Wahl",e:"m²",p:54.00},
+    ]},
+    {titel:"Elektro", items:[
+      {id:"el1",  name:"Kabel verlegen je lfdm fuer Stromauslaesse inkl. Bohrung fuer Einbaudosen",e:"m",p:54.86},
+      {id:"el2",  name:"Schutzkontakt Einzel-Steckdose montieren",e:"Stk.",p:25.70},
+      {id:"el3",  name:"Demontage Taster, Steckdosen und Leuchten inkl. Einbau und Blenden (pauschal)",e:"Pausch.",p:55.69},
+      {id:"el4",  name:"Elektroleitungen im Bad aufschalten, Funktionspruefung aller Anschlussstellen",e:"Pausch.",p:73.47},
+      {id:"el5",  name:"Horizontale Verlegung elektrische Hauptleitung fuer Baeder inkl. Stemmarbeiten",e:"Pausch.",p:344.60},
+      {id:"el6",  name:"FI-Schutzschalter 16A, 30mA montieren und anklemmen",e:"Stk.",p:106.65},
+      {id:"el7",  name:"Rollladenantrieb montieren",e:"Stk.",p:384.41},
+      {id:"el8",  name:"Eintasten-Wippschalter (Serie) montieren",e:"Stk.",p:31.08},
+      {id:"el9",  name:"Kabel 5-adrig fuer Durchlauferhitzer bis 24 kW je lfdm",e:"m",p:60.05},
+      {id:"el10", name:"Elektrofussbodenheizung anschliessen ohne Material",e:"Stk.",p:133.65},
+      {id:"el11", name:"Downlight montieren (Material bauseits)",e:"Stk.",p:106.92},
+      {id:"el12", name:"Oeffnung in Trockenbau fuer Einbauleuchte erstellen",e:"Stk.",p:13.37},
+      {id:"el13", name:"Eintasten-Wippschalter montieren inkl. Einbauteile (Material bauseits)",e:"Stk.",p:22.28},
+      {id:"el14", name:"3er-Set NV-Halog/LED inkl. Einbauteile montieren",e:"Stk.",p:142.56},
+      {id:"el15", name:"Doppel-Wippschalter montieren inkl. Einbauteile (Material bauseits)",e:"Stk.",p:22.28},
+      {id:"el16", name:"Universal-Dimmer montieren inkl. Einbauteile (Material bauseits)",e:"Stk.",p:22.28},
+      {id:"el17", name:"Deckenaufbauleuchte 30-45 cm montieren (Material bauseits)",e:"Stk.",p:40.10},
+      {id:"el18", name:"Wandaufbauleuchte 230V an vorhandenem Auslass montieren (Material bauseits)",e:"Stk.",p:31.19},
+      {id:"el19", name:"Schutzkontakt Einzel-Steckdose montieren inkl. Einbauteile (Material bauseits)",e:"Stk.",p:22.28},
+      {id:"el20", name:"Konverter fuer LED-Leuchte montieren (Material bauseits)",e:"Stk.",p:26.73},
+      {id:"el21", name:"Wandeinbau-LED-Leuchte in GK/Mauerwerk montieren (Material bauseits)",e:"Stk.",p:40.10},
+      {id:"el22", name:"Bewegungsmelder montieren (Material bauseits)",e:"Stk.",p:22.28},
+      {id:"el23", name:"Ansteuerungselement Rollladenantrieb montieren (Material bauseits)",e:"Stk.",p:26.73},
+      {id:"el24", name:"UP-Digitalradio in Unterputzdose montieren (Material bauseits)",e:"Stk.",p:53.46},
+      {id:"el25", name:"Einbaulautsprecher Unterputzdose Feuchtraum montieren (Material bauseits)",e:"Stk.",p:53.46},
+      {id:"el26", name:"Einfachrahmen Schalterserie montieren (Material bauseits)",e:"Stk.",p:4.46},
+      {id:"el27", name:"Doppelrahmen Schalterserie montieren (Material bauseits)",e:"Stk.",p:5.35},
+      {id:"el28", name:"Dreifachrahmen Schalterserie montieren (Material bauseits)",e:"Stk.",p:6.24},
+      {id:"el29", name:"Deckeneinbaulautsprecher Feuchtraum in GK montieren inkl. Oeffnung (Material bauseits)",e:"Stk.",p:106.92},
+    ]},
+    {titel:"Serviceangebot", items:[
+      {id:"sv1", name:"Endreinigung Bad zur Uebergabe — Nassreinigung aller Fliesen, Sanitaergegenstaende und Glas",e:"Pausch.",p:186.97},
+      {id:"sv2", name:"Projektsteuerung, Terminplanung, Koordination Gewerke, Aufmass und Abrechnung",e:"Pausch.",p:673.65},
+      {id:"sv3", name:"Mobile Toilettenkabine waehrend Badsanierung (inkl. Reinigung, Desinfektion, Entleerung)",e:"Pausch.",p:202.50},
+      {id:"sv4", name:"Mobiler Badezimmeranhaenger (Dusche, WC, Waschbecken) inkl. Reinigung und Entleerung",e:"Pausch.",p:538.65},
+    ]},
+  ],
+};
+
+// ─── STATE ─────────────────────────────────────────────────────
+let positionen = []; // {id, name, e, p, menge, minuten, titelKey, alternativ}
+let curTab = 'wp';
+let stundensatz = parseFloat(localStorage.getItem('shk_ss') || '85');
+let apiKey = localStorage.getItem('shk_key') || '';
+
+document.getElementById('stundensatz').value = stundensatz;
+if(apiKey) document.getElementById('api-key').value = apiKey;
+updateLohnInfo();
+renderArtListe();
+
+function saveSettings(){
+  stundensatz = parseFloat(document.getElementById('stundensatz').value) || 85;
+  apiKey = document.getElementById('api-key').value.trim();
+  localStorage.setItem('shk_ss', stundensatz);
+  localStorage.setItem('shk_key', apiKey);
+  const h = document.getElementById('saved-hint');
+  h.style.display='inline'; setTimeout(()=>h.style.display='none',2000);
+  updateLohnInfo(); updateAlles();
+}
+
+function updateLohnInfo(){
+  document.getElementById('lohn-info').textContent =
+    `${fmt(stundensatz)} € / Std. = ${fmt(stundensatz/60)} € / Min.`;
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Reihenfolge der Titelgruppen wie im Katalog definiert (nicht Klick-Reihenfolge)
+function getTitelOrder(){
+  const order=[];
+  Object.values(ARTIKEL).forEach(tab=>tab.forEach(g=>order.push(g.titel)));
+  return order;
+}
+
+function showSTab(t, btn){
+  curTab = t;
+  document.querySelectorAll('.stab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderArtListe();
+}
+
+function renderArtListe(){
+  const gruppen = ARTIKEL[curTab];
+  const imAngebot = new Set(positionen.map(p=>p.id));
+  document.getElementById('art-liste').innerHTML = gruppen.map(g=>`
+    <div class="art-titel">${g.titel}</div>
+    ${g.items.map(it=>`
+      <div class="art-item${imAngebot.has(it.id)?' im-angebot':''}${it.alternativ?' alternativ':''}" onclick="addArtikel('${it.id}','${escQ(g.titel)}')">
+        <div>
+          <div class="art-name">${it.name}</div>
+          <div class="art-einh">${it.e}${it.alternativ?' <span class="alt-badge">Alternativ</span>':''}</div>
+        </div>
+        <div class="art-preis">${fmt(it.p)} €</div>
+        <button class="art-add">+</button>
+      </div>`).join('')}
+  `).join('');
+}
+
+function escQ(s){ return s.replace(/'/g,"\\'"); }
+
+function findArtikel(id){
+  for(const tab of Object.values(ARTIKEL))
+    for(const g of tab)
+      for(const it of g.items)
+        if(it.id===id) return it;
+  return null;
+}
+
+function addArtikel(id, titelKey){
+  const it = findArtikel(id);
+  if(!it) return;
+  const existing = positionen.find(p=>p.id===id);
+  if(existing){ existing.menge++; }
+  else { positionen.push({...it, menge:1, minuten:0, titelKey}); }
+  renderArtListe();
+  updateAlles();
+}
+
+function updateAlles(){
+  const leer = document.getElementById('pos-leer');
+  const wrap = document.getElementById('pos-wrap');
+  const sbox = document.getElementById('summen-wrap');
+  if(positionen.length===0){
+    leer.style.display='block'; wrap.style.display='none'; sbox.style.display='none'; return;
+  }
+  leer.style.display='none'; wrap.style.display='block'; sbox.style.display='block';
+
+  const mp = stundensatz/60;
+  // Gruppieren nach Titel, aber in Katalog-Reihenfolge ausgeben
+  const titelMap = {};
+  positionen.forEach(p=>{
+    if(!titelMap[p.titelKey]) titelMap[p.titelKey]=[];
+    titelMap[p.titelKey].push(p);
+  });
+
+  let html='', posNr=1;
+  getTitelOrder().forEach(titel=>{
+    const posen = titelMap[titel];
+    if(!posen) return;
+    html+=`<tr class="titel-row"><td colspan="8">${titel}</td></tr>`;
+    posen.forEach(p=>{
+      const lohnPos = p.minuten>0 ? mp*p.minuten*p.menge : 0;
+      const gp = p.p*p.menge + lohnPos;
+      html+=`<tr${p.alternativ?' class="alt-row"':''}>
+        <td style="color:#bbb;font-size:10px">${String(posNr++).padStart(2,'0')}</td>
+        <td><div class="pos-bez">${p.name}${p.alternativ?' <span class="alt-badge">Alternativ · nicht in Summe</span>':''}</div>${p.minuten>0?`<div class="lohn-cell">+ ${p.minuten} Min. Arbeit = ${fmt(lohnPos)} €</div>`:''}</td>
+        <td class="r"><input class="num-input" type="number" min="0.01" step="0.01" value="${p.menge}" onchange="setMenge('${p.id}',this.value)"></td>
+        <td class="r" style="font-size:10px;color:#aaa">${p.e}</td>
+        <td class="r"><input class="min-input" type="number" min="0" step="1" value="${p.minuten}" placeholder="0" onchange="setMin('${p.id}',this.value)" title="Arbeitsminuten"></td>
+        <td class="r">${fmt(p.p)}</td>
+        <td class="r"><strong${p.alternativ?' style="color:#b45309"':''}>${fmt(gp)}</strong></td>
+        <td><button class="del-btn" onclick="removePos('${p.id}')">✕</button></td>
+      </tr>`;
+    });
+  });
+  document.getElementById('pos-tbody').innerHTML = html;
+
+  const mat = positionen.reduce((s,p)=>p.alternativ?s:s+p.p*p.menge,0);
+  const lohn = positionen.reduce((s,p)=>p.alternativ?s:s+(p.minuten>0?mp*p.minuten*p.menge:0),0);
+  const netto = mat+lohn, mwst=netto*.19;
+  document.getElementById('s-material').textContent=fmt(mat)+' €';
+  document.getElementById('s-lohn').textContent=fmt(lohn)+' €';
+  document.getElementById('s-netto').textContent=fmt(netto)+' €';
+  document.getElementById('s-mwst').textContent=fmt(mwst)+' €';
+  document.getElementById('s-brutto').textContent=fmt(netto+mwst)+' €';
+}
+
+function setMenge(id,v){
+  const p=positionen.find(x=>x.id===id);
+  if(p){
+    const n=parseFloat(v);
+    p.menge = isNaN(n) ? 1 : Math.max(0.01, n);
+    updateAlles();
+  }
+}
+function setMin(id,v){const p=positionen.find(x=>x.id===id);if(p){p.minuten=Math.max(0,parseInt(v)||0);updateAlles();}}
+function removePos(id){positionen=positionen.filter(p=>p.id!==id);renderArtListe();updateAlles();}
+function resetAlles(){
+  positionen=[];
+  document.getElementById('kundenname').value='';
+  document.getElementById('adresse').value='';
+  document.getElementById('preview').className='preview';
+  document.getElementById('print-btn').style.display='none';
+  renderArtListe();
+  updateAlles();
+}
+
+async function erstelleAngebot(){
+  if(positionen.length===0){alert('Bitte zuerst Artikel hinzufügen.');return;}
+  const kunde=document.getElementById('kundenname').value||'Auftraggeber';
+  const adr=document.getElementById('adresse').value||'';
+  const mp=stundensatz/60;
+  const mat=positionen.reduce((s,p)=>p.alternativ?s:s+p.p*p.menge,0);
+  const lohn=positionen.reduce((s,p)=>p.alternativ?s:s+(p.minuten>0?mp*p.minuten*p.menge:0),0);
+  const netto=mat+lohn, mwst=netto*.19, brutto=netto+mwst;
+  const angebotsnr=`AN${new Date().getFullYear().toString().slice(2)}${Math.floor(Math.random()*9000+1000)}`;
+  const datum=new Date().toLocaleDateString('de-DE');
+  const gueltig=new Date(Date.now()+14*864e5).toLocaleDateString('de-DE');
+
+  let titel = positionen.some(p=>['va1','va2','va3','va4','va5','mhg1','mhg2','mhg3'].includes(p.id))
+    ? 'Wärmepumpen-Installation' : 'Sanitär- und Badarbeiten';
+
+  if(apiKey){
+    const bar=document.getElementById('loading-bar');bar.classList.add('show');
+    try{
+      const pl=positionen.map(p=>p.name).slice(0,5).join(', ');
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:60,messages:[{role:'user',content:`Angebots-Titel (max 7 Wörter) für Kunde "${kunde}": ${pl}. Nur Titel, kein Anführungszeichen.`}]})});
+      if(r.ok){const d=await r.json();titel=d.content?.[0]?.text?.trim()||titel;}
+    }catch(e){}
+    bar.classList.remove('show');
+  }
+
+  renderPreview({titel,angebotsnr,datum,gueltig,kunde,adr,mat,lohn,netto,mwst,brutto,mp});
+}
+
+function renderPreview({titel,angebotsnr,datum,gueltig,kunde,adr,mat,lohn,netto,mwst,brutto,mp}){
+  // Gruppen aufbauen, Ausgabe in Katalog-Reihenfolge
+  const titelMap={};
+  positionen.forEach(p=>{if(!titelMap[p.titelKey])titelMap[p.titelKey]=[];titelMap[p.titelKey].push(p);});
+
+  let posRows='', posNr=1;
+  getTitelOrder().forEach(titel2=>{
+    const posen = titelMap[titel2];
+    if(!posen) return;
+    posRows+=`<tr class="titel-row"><td colspan="6">${titel2}</td></tr>`;
+    let subtotal=0;
+    posen.forEach(p=>{
+      const lohnPos=p.minuten>0?mp*p.minuten*p.menge:0;
+      const gp=p.p*p.menge+lohnPos;
+      if(!p.alternativ) subtotal+=gp;
+      posRows+=`<tr${p.alternativ?' class="alt-row"':''}>
+        <td style="color:#bbb;font-size:10px">${String(posNr++).padStart(2,'0')}</td>
+        <td><div>${p.name}${p.alternativ?' <span class="alt-badge">Alternativ · nicht in Summe</span>':''}</div>${p.minuten>0?`<div class="lohn-note">inkl. ${p.minuten} Min. Arbeitslohn (${fmt(lohnPos)} €)</div>`:''}</td>
+        <td class="r">${fmt(p.menge)}</td>
+        <td class="r" style="font-size:10px">${p.e}</td>
+        <td class="r">${fmt(p.p)}</td>
+        <td class="r"><strong${p.alternativ?' style="color:#b45309"':''}>${fmt(gp)}</strong></td>
+      </tr>`;
+    });
+    posRows+=`<tr class="subtotal-row"><td colspan="5">${titel2} Summe</td><td>${fmt(subtotal)} €</td></tr>`;
+  });
+
+  const kundeSafe = escapeHtml(kunde);
+  const adrSafe = escapeHtml(adr).replace(/,\s*/g,'<br>');
+  const titelSafe = escapeHtml(titel);
+
+  document.getElementById('preview').className='preview show pv';
+  document.getElementById('print-btn').style.display='inline-flex';
+  document.getElementById('preview').innerHTML=`
+    <div class="pv-kopf">
+      <div><p class="name">${FIRMA.name}</p><p>${FIRMA.strasse}<br>${FIRMA.ort}<br>Tel.: ${FIRMA.tel}<br>${FIRMA.email}</p>
+        <p style="margin-top:3px;font-size:10px;color:#aaa">USt-ID: ${FIRMA.ustid} · St.-Nr.: ${FIRMA.steuernr}</p></div>
+      <div class="kunde"><p class="name">${kundeSafe}</p><p>${adrSafe}</p></div>
+    </div>
+    <p class="pv-titel">${titelSafe}</p>
+    <p class="pv-meta">Angebots-Nr.: ${angebotsnr} &nbsp;·&nbsp; Datum: ${datum} &nbsp;·&nbsp; Gültig bis: ${gueltig}</p>
+    <div class="pv"><table>
+      <thead><tr>
+        <th style="width:36px">Pos.</th><th>Bezeichnung</th>
+        <th class="r" style="width:48px">Menge</th>
+        <th class="r" style="width:46px">Einh.</th>
+        <th class="r" style="width:84px">E-Preis €</th>
+        <th class="r" style="width:88px">G-Preis €</th>
+      </tr></thead>
+      <tbody>${posRows}</tbody>
+    </table></div>
+    <div class="pv-summen"><table>
+      ${lohn>0?`<tr><td style="color:#888">Material / Leistung</td><td>${fmt(mat)} €</td></tr>
+      <tr><td style="color:#b45309">⏱ Arbeitslohn (${fmt(stundensatz)} €/Std.)</td><td style="color:#b45309">${fmt(lohn)} €</td></tr>`:''}
+      <tr><td style="color:#888">Netto-Summe</td><td>${fmt(netto)} €</td></tr>
+      <tr><td style="color:#888">zzgl. 19 % MwSt.</td><td>${fmt(mwst)} €</td></tr>
+      <tr class="ptotal"><td>Gesamt-Betrag</td><td>${fmt(brutto)} €</td></tr>
+    </table></div>
+    <div class="pv-footer">
+      <p>Zahlbar sofort ohne Abzug. <strong>Zahlungsbedingungen:</strong> 1/3 Anzahlung, 1/3 bei Ausführungsbeginn, 1/3 nach Abnahme.</p>
+      <p style="margin-top:4px">Wir halten uns 14 Tage an dieses Angebot gebunden. Alternativ-Positionen sind nicht in der Summe enthalten.</p>
+      <p style="margin-top:4px">IBAN: ${FIRMA.iban} · BIC: ${FIRMA.bic} (Raiffeisenbank Eifeltor eG)</p>
+      <div class="pv-unterschrift">
+        <div>Ort, Datum &nbsp;&nbsp; Dirk Demant</div>
+        <div>Ort, Datum &nbsp;&nbsp; Unterschrift Auftraggeber</div>
+      </div>
+    </div>`;
+  document.getElementById('preview').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function druckeAngebot(){
+  const preview = document.getElementById('preview');
+  if(!preview.classList.contains('show')){
+    alert('Bitte zuerst ein Angebot erstellen.');
+    return;
+  }
+  window.print();
+}
+
+function fmt(v){return Number(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});}
+</script>
+</body>
+</html>
