@@ -9,6 +9,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />} />
+        <Route path="/rechner" element={<App />} />
         <Route path="/spiele" element={<GamesApp />} />
       </Routes>
     </BrowserRouter>
