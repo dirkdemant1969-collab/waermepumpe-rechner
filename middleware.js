@@ -1,9 +1,9 @@
 import { next } from '@vercel/functions';
 
-// Nur den Angebotsassistenten und die Auswahlseite schuetzen –
-// der Waermepumpen-Rechner unter "/" bleibt oeffentlich.
+// Nur den Angebotsassistenten schuetzen – die Auswahlseite (jetzt auch
+// unter "/") und der Waermepumpen-Rechner unter "/rechner" bleiben oeffentlich.
 export const config = {
-  matcher: ['/angebotsassistent.html', '/start.html'],
+  matcher: ['/angebotsassistent.html'],
 };
 
 export default function middleware(request) {
