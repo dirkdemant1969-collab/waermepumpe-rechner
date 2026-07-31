@@ -113,12 +113,43 @@ const HEIZUNGEN = {
   fernwaerme:   { label:"Fernwärme",    icon:"🏭", farbe:"#9B59B6", co2_kwh:0.150, einheit:"kWh",   kwh_faktor:1,  klimaFaehig:true,  klimaHinweis:"Wärmenetzanschluss § KfW 458" },
 };
 
-// KfW 458 – Förderbasis-Staffelung (Stand 2025, offiziell):
-// WE 1: 30.000 € · WE 2–6: je 15.000 € · WE 7+: je 8.000 €
+// KfW 458 – Förderbasis-Staffelung (Stand 21.07.2026, BEG-Reform):
+// WE 1: 28.000 € · WE 2–6: je 15.000 € · WE 7+: je 8.000 € · Deckel je WE: 80 %
+// Effizienzbonus (5 %) und Emissionsminderungszuschlag (2.500 €) sind ersatzlos entfallen.
 const WP_CO2_KWH   = 0.380;
-const KFW_WE1      = 30000;
+const KFW_WE1      = 28000;
 const KFW_WE2_6    = 15000;
 const KFW_WE7PLUS  = 8000;
+const KFW_CAP      = 80;
+
+// Klimageschwindigkeitsbonus – gesetzlich festgelegter Abschmelzpfad ab 21.07.2026
+const KLIMA_ZEITRAEUME = [
+  { id:"p1", von:"2026-07-21", bis:"2027-01-31", satz:16, label:"21.07.2026 – 31.01.2027" },
+  { id:"p2", von:"2027-02-01", bis:"2027-07-31", satz:12, label:"01.02.2027 – 31.07.2027" },
+  { id:"p3", von:"2027-08-01", bis:"2028-01-31", satz:8,  label:"01.08.2027 – 31.01.2028" },
+  { id:"p4", von:"2028-02-01", bis:"2028-07-31", satz:4,  label:"01.02.2028 – 31.07.2028" },
+  { id:"p5", von:"2028-08-01", bis:null,          satz:0,  label:"ab 01.08.2028 (ausgelaufen)" },
+];
+function aktuellerKlimaZeitraum() {
+  const heute = new Date().toISOString().slice(0,10);
+  return KLIMA_ZEITRAEUME.find(z => heute >= z.von && (z.bis===null || heute <= z.bis)) || KLIMA_ZEITRAEUME[0];
+}
+
+// Einkommensbonus – gestaffelt ab 21.07.2026 (zu versteuerndes Haushaltseinkommen,
+// pauschal −10.000 € wenn mind. 1 Kind < 18 Jahre im Haushalt lebt)
+function einkommensbonusSatz(einkommen, kindImHaushalt) {
+  const massgeblich = Math.max(0, (einkommen||0) - (kindImHaushalt ? 10000 : 0));
+  if (massgeblich <= 30000) return 40;
+  if (massgeblich <= 40000) return 30;
+  if (massgeblich <= 50000) return 10;
+  return 0;
+}
+const EINK_SZENARIEN = [
+  { id:"D", label:"≤ 30.000 €",        satz:40, beispiel:25000 },
+  { id:"C", label:"30.001–40.000 €",   satz:30, beispiel:35000 },
+  { id:"B", label:"40.001–50.000 €",   satz:10, beispiel:45000 },
+  { id:"A", label:"> 50.000 €",        satz:0,  beispiel:60000 },
+];
 
 const fmt  = (v,d=0) => Number(v).toLocaleString("de-DE",{style:"currency",currency:"EUR",maximumFractionDigits:d});
 const fmtN = (v,d=0) => Number(v).toLocaleString("de-DE",{maximumFractionDigits:d});
@@ -151,21 +182,20 @@ function berechneJahr(year, heiztyp, verbrauchKwh, preise, steigerung, cop, co2S
            detail: { betrieb, nebenk, co2Abg } };
 }
 
-// KfW 458 – Fördersatz einer einzelnen Wohneinheit
-//  • Grundförderung 30 %  → ALLE Wohneinheiten (auch vermietete)
-//  • Effizienzbonus 5 %   → ALLE WE (bei WP mit natürl. Kältemittel/Erdreich/Wasser/Abwasser)
-//  • Klimabonus 20 %      → NUR selbstgenutzte WE (pro WE max. einmal)
-//  • Einkommensbonus 30 % → NUR selbstgenutzte HAUPTwohneinheit (genau EINE WE, Einkommen ≤ 40.000 €)
-//  • Deckel: max. 70 % je Wohneinheit
-function calcWE({ basis, gasAlt, selbstgenutzt, istHauptwohnung, mitKlima, mitEinkommen, mitEffizienz, heiztyp }) {
+// KfW 458 – Fördersatz einer einzelnen Wohneinheit (Stand 21.07.2026)
+//  • Grundförderung 30 %       → ALLE Wohneinheiten (auch vermietete)
+//  • Klimabonus (gestaffelt)   → NUR selbstgenutzte WE (pro WE max. einmal)
+//  • Einkommensbonus 10–40 %   → NUR selbstgenutzte HAUPTwohneinheit, gestaffelt nach Haushaltseinkommen
+//  • Deckel: max. 80 % je Wohneinheit
+//  • Effizienzbonus und Emissionsminderungszuschlag sind ersatzlos entfallen
+function calcWE({ basis, gasAlt, selbstgenutzt, istHauptwohnung, mitKlima, klimaSatz, einkommenSatz, heiztyp }) {
   const klimaBerechtigt = selbstgenutzt && HEIZUNGEN[heiztyp]?.klimaFaehig && mitKlima && (heiztyp !== "gas" || gasAlt);
   const grund = 30;
-  const klima = klimaBerechtigt ? 20 : 0;
-  // Einkommensbonus ausschließlich für die selbstgenutzte Hauptwohneinheit (Merkblatt 12/2025)
-  const eink  = (istHauptwohnung && mitEinkommen) ? 30 : 0;
-  const effi  = mitEffizienz ? 5 : 0;
-  const satz  = Math.min(grund + klima + eink + effi, 70);
-  return { basis, grund, klima, eink, effi, satz, zuschuss: basis * satz / 100, klimaBerechtigt, istHauptwohnung };
+  const klima = klimaBerechtigt ? klimaSatz : 0;
+  // Einkommensbonus ausschließlich für die selbstgenutzte Hauptwohneinheit
+  const eink  = istHauptwohnung ? einkommenSatz : 0;
+  const satz  = Math.min(grund + klima + eink, KFW_CAP);
+  return { basis, grund, klima, eink, satz, zuschuss: basis * satz / 100, klimaBerechtigt, istHauptwohnung };
 }
 
 // KfW 458 Förderbasis je Wohneinheit (offiziell, Stand 2025):
@@ -186,20 +216,20 @@ function kfwGesamtbasis(anzahlWE) {
 // ─────────────────────────────────────────────────────────────────────────────
 // KfW 458 – ANTEILIGE Berechnung bei zentraler Heizung (offizielles KfW-Beispiel)
 //
-// Methode laut KfW (WEG-/MFH-Beispiel):
+// Methode laut KfW (WEG-/MFH-Beispiel), Stand 21.07.2026:
 //  1. Investitionskosten werden ANTEILIG auf die Wohneinheiten verteilt
 //     (Standard: gleichmäßig je WE; alternativ nach Miteigentumsanteil).
 //  2. Jeder WE-Anteil wird auf ihren KfW-Höchstbetrag gedeckelt
-//     (WE1: 30.000 €, WE2–6: 15.000 €, WE7+: 8.000 €).
+//     (WE1: 28.000 €, WE2–6: 15.000 €, WE7+: 8.000 €).
 //  3. Auf jeden gedeckelten Anteil wird der für DIESE WE gültige Satz gerechnet:
-//       • vermietet:      30 % Grund (+5 % Effizienz)  → max. 35 %
-//       • selbstgenutzt:  30 % + 20 % Klima + 30 % Eink. + 5 % Effizienz → max. 70 %
+//       • vermietet:      30 % Grund (keine weiteren Boni)
+//       • selbstgenutzt:  30 % + Klimabonus (gestaffelt) + Einkommensbonus (10–40 %) → max. 80 %
 //       • Einkommensbonus nur für die EINE selbstgenutzte Hauptwohneinheit
 // ─────────────────────────────────────────────────────────────────────────────
 function berechneKfW({ gebaeude, selbstgenutztWE, investition, anzahlWE,
-                       gasAlt, mitKlima, mitEinkommen, mitEffizienz, heiztyp,
-                       mitEmissionsZuschlag }) {
+                       gasAlt, mitKlima, klimaSatz, haushaltseinkommen, kindImHaushalt, heiztyp }) {
   const weAnzahl = gebaeude === "efh" ? 1 : (anzahlWE || 2);
+  const einkommenSatz = einkommensbonusSatz(haushaltseinkommen, kindImHaushalt);
 
   // 1. Kostenanteil je WE — gleichmäßige Aufteilung
   const anteilProWE = investition / weAnzahl;
@@ -222,16 +252,12 @@ function berechneKfW({ gebaeude, selbstgenutztWE, investition, anzahlWE,
     const we = calcWE({ basis, gasAlt,
                         selbstgenutzt: selbst,
                         istHauptwohnung: haupt,
-                        mitKlima, mitEinkommen, mitEffizienz, heiztyp });
+                        mitKlima, klimaSatz, einkommenSatz, heiztyp });
     we.nummer = i;
     we.selbst = selbst;
     weListe.push(we);
     zuschussGes += we.zuschuss;
   }
-
-  // Emissionsminderungszuschlag: pauschal 2.500 €, unabhängig vom Förderdeckel (nur Biomasse)
-  const emissionsZuschlag = mitEmissionsZuschlag ? 2500 : 0;
-  zuschussGes += emissionsZuschlag;
 
   const effSatz = investition > 0 ? Math.round(zuschussGes / investition * 1000) / 10 : 0;
 
@@ -249,7 +275,7 @@ function berechneKfW({ gebaeude, selbstgenutztWE, investition, anzahlWE,
   return { we1, we2, weListe, anteilProWE, zuschussGes, effSatz,
            investNetto: investition - zuschussGes,
            basisWE1, basisWE2, basisWeitereWE, rest, gesamtBasis,
-           emissionsZuschlag, zuschussWeitereWE };
+           einkommenSatz, zuschussWeitereWE };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -278,10 +304,10 @@ export default function App() {
   const [investition,  setInvestition]  = useState(22000);
   const [gasAlt,       setGasAlt]       = useState(true);
   const [mitKlima,     setMitKlima]     = useState(true);
-  const [mitEinkommen, setMitEinkommen] = useState(false);
-  const [mitEffizienz,       setMitEffizienz]       = useState(true);
+  const [haushaltseinkommen, setHaushaltseinkommen] = useState(55000); // zu versteuerndes Haushaltseinkommen €
+  const [kindImHaushalt,     setKindImHaushalt]     = useState(false); // pauschal −10.000 € Anrechnung
   const [anzahlWE,           setAnzahlWE]           = useState(2);    // bei ZFH/MFH
-  const [mitEmissionsZuschlag, setMitEmissionsZuschlag] = useState(false); // nur Biomasse
+  const [klimaZeitraumId, setKlimaZeitraumId] = useState(()=>aktuellerKlimaZeitraum().id);
 
   // ── Energiepreise & Steigerung ─────────────────────────────────────────────
   const [preise, setPreise] = useState({ gas:0.12, oel:1.00, nachtspeicher:0.28, fernwaerme:0.14, wp_strom:0.22 });
@@ -298,10 +324,12 @@ export default function App() {
   const setP = (k,v) => setPreise(p => ({ ...p, [k]:v }));
   const setS = (k,v) => setSteigerung(s => ({ ...s, [k]:v }));
 
+  const klimaZeitraum = KLIMA_ZEITRAEUME.find(z=>z.id===klimaZeitraumId) || KLIMA_ZEITRAEUME[0];
+
   const kfw = useMemo(() => berechneKfW({
     gebaeude, selbstgenutztWE:selbstWE, investition, anzahlWE,
-    gasAlt, mitKlima, mitEinkommen, mitEffizienz, heiztyp, mitEmissionsZuschlag,
-  }), [gebaeude, selbstWE, investition, anzahlWE, gasAlt, mitKlima, mitEinkommen, mitEffizienz, heiztyp, mitEmissionsZuschlag]);
+    gasAlt, mitKlima, klimaSatz:klimaZeitraum.satz, haushaltseinkommen, kindImHaushalt, heiztyp,
+  }), [gebaeude, selbstWE, investition, anzahlWE, gasAlt, mitKlima, klimaZeitraum.satz, haushaltseinkommen, kindImHaushalt, heiztyp]);
 
   const zeitreihe = useMemo(() => {
     const rows = [];
@@ -491,8 +519,8 @@ export default function App() {
   // Klimabonus-Label
   const klimaBerechtigt = mitKlima && HEIZUNGEN[heiztyp]?.klimaFaehig && (heiztyp!=="gas"||gasAlt);
   const klimaLabel = heiztyp==="gas"
-    ? `+20 % Klimabonus (Gas ${gasAlt?"≥ 20 J. ✔":"< 20 J. ✗"})`
-    : `+20 % Klimabonus (${HEIZUNGEN[heiztyp]?.label} ✔)`;
+    ? `+${klimaZeitraum.satz} % Klimabonus (Gas ${gasAlt?"≥ 20 J. ✔":"< 20 J. ✗"})`
+    : `+${klimaZeitraum.satz} % Klimabonus (${HEIZUNGEN[heiztyp]?.label} ✔)`;
 
   // Nebenkosten-Total für aktiven Heiztyp (für Anzeige im Accordion-Header)
   const nkTotal = (typ) => {
@@ -696,7 +724,7 @@ export default function App() {
         <div style={{ maxWidth:1200, margin:"0 auto", padding:"26px 20px" }}>
           <div style={{ marginBottom:20 }}>
             <div style={{ fontSize:17, fontWeight:800, marginBottom:3, color:T.text }}>🏦 KfW 458 — Förderrechner & Szenarien</div>
-            <div style={{ fontSize:12, color:T.textMuted }}>Alle Einstellungen mit dem Rechner-Tab verknüpft · BEG-EM-Richtlinien Stand 2025</div>
+            <div style={{ fontSize:12, color:T.textMuted }}>Alle Einstellungen mit dem Rechner-Tab verknüpft · BEG-EM-Richtlinien Stand 21.07.2026</div>
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"360px 1fr", gap:20, alignItems:"start" }}>
@@ -728,12 +756,12 @@ export default function App() {
                       <span style={{ fontSize:16, fontWeight:800, color:T.accent, minWidth:30 }}>{anzahlWE}</span>
                     </div>
                     <div style={{ fontSize:10, color:T.textFaint, marginBottom:10, lineHeight:1.7 }}>
-                      WE 1: 30.000 € · WE 2–6: je 15.000 € · ab WE 7: je 8.000 € Förderbasis
+                      WE 1: {fmt(KFW_WE1)} · WE 2–6: je {fmt(KFW_WE2_6)} · ab WE 7: je {fmt(KFW_WE7PLUS)} Förderbasis
                     </div>
                     <div style={{ fontSize:11, color:T.textMuted, marginBottom:8, fontWeight:600 }}>Nutzung durch den Eigentümer:</div>
                     {[
-                      [0,"Nur vermietet","Keine selbstgenutzte WE — nur Grundförderung + Effizienzbonus (35 %) für alle Einheiten"],
-                      [1,"Eine WE selbst bewohnt","WE 1 = Hauptwohnsitz (alle Boni möglich), übrige WE vermietet (35 %)"],
+                      [0,"Nur vermietet","Keine selbstgenutzte WE — nur Grundförderung (30 %) für alle Einheiten"],
+                      [1,"Eine WE selbst bewohnt","WE 1 = Hauptwohnsitz (alle Boni möglich), übrige WE vermietet (30 %)"],
                       [2,"Zwei WE selbst bewohnt","WE 1 = Hauptwohnsitz (alle Boni), WE 2 selbst (Klimabonus, aber kein Einkommensbonus)"],
                     ].map(([val,lbl,sub])=>(
                       <label key={val} style={{ display:"flex", alignItems:"flex-start", gap:9, cursor:"pointer",
@@ -751,11 +779,11 @@ export default function App() {
                     ))}
                     <div style={{ fontSize:10, color:T.textMuted, marginTop:8, padding:"9px 11px",
                       background:T.infoBoxAmber, borderRadius:8, lineHeight:1.7 }}>
-                      ⚖️ <strong>Wichtig (KfW-Merkblatt 12/2025):</strong> Die Investitionskosten werden
+                      ⚖️ <strong>Wichtig (KfW 458, Stand 21.07.2026):</strong> Die Investitionskosten werden
                       <strong> anteilig auf die Wohneinheiten</strong> verteilt; je WE wird auf den eigenen
-                      Höchstbetrag gedeckelt (WE 1: 30.000 €, WE 2–6: je 15.000 €). Der <strong>Einkommensbonus</strong> gilt
+                      Höchstbetrag gedeckelt (WE 1: {fmt(KFW_WE1)}, WE 2–6: je {fmt(KFW_WE2_6)}). Der <strong>Einkommensbonus</strong> gilt
                       nur für die <strong>eine selbstgenutzte Hauptwohneinheit</strong>, der <strong>Klimabonus</strong>
-                      für jede selbstgenutzte WE. Vermietete WE erhalten nur Grundförderung + Effizienzbonus (max. 35 %).
+                      für jede selbstgenutzte WE. Vermietete WE erhalten nur die Grundförderung (30 %).
                     </div>
                   </div>
                 )}
@@ -785,17 +813,35 @@ export default function App() {
               </div>
 
               <div style={C_S}>
-                <div style={SEC}>Förderbausteine KfW 458</div>
+                <div style={SEC}>Förderbausteine KfW 458 (Stand 21.07.2026)</div>
                 <CheckBox label="✅ Grundförderung 30 % (immer enthalten)" checked={true} onChange={()=>{}} disabled />
+
+                <div style={{ marginBottom:10 }}>
+                  <div style={{ fontSize:11, color:T.textMuted, marginBottom:6 }}>Klimabonus-Zeitraum (Antragstellung):</div>
+                  <select value={klimaZeitraumId} onChange={e=>setKlimaZeitraumId(e.target.value)} style={INP}>
+                    {KLIMA_ZEITRAEUME.map(z=><option key={z.id} value={z.id}>{z.label} — {z.satz} %</option>)}
+                  </select>
+                </div>
                 <CheckBox label={klimaLabel} checked={mitKlima} onChange={setMitKlima}
                   disabled={!HEIZUNGEN[heiztyp]?.klimaFaehig||(gebaeude==="zfh"&&selbstWE===0)} />
-                <CheckBox label="+ 30 % Einkommensbonus (Haushaltseinkommen ≤ 40.000 €, nur Selbstnutzer)"
-                  checked={mitEinkommen} onChange={setMitEinkommen} disabled={gebaeude==="zfh"&&selbstWE===0} />
-                <CheckBox label="+ 5 % Effizienzbonus (Luft/WP mit natürl. Kältemittel oder Erdwärme)"
-                  checked={mitEffizienz} onChange={setMitEffizienz} />
-                <div style={{ height:1, background:T.divider, margin:"8px 0" }} />
-                <CheckBox label="+ 2.500 € Emissionsminderungszuschlag (nur Biomasse-Anlagen mit Feinstaubgrenzwert ≤ 2,5 mg/m³, pauschal, außerhalb Deckel)"
-                  checked={mitEmissionsZuschlag} onChange={setMitEmissionsZuschlag} />
+
+                <div style={{ height:1, background:T.divider, margin:"10px 0" }} />
+                <div style={{ fontSize:12, color:T.textSub, marginBottom:6, fontWeight:600 }}>Einkommensbonus (gestaffelt, nur Hauptwohneinheit):</div>
+                <input type="number" value={haushaltseinkommen}
+                  onChange={e=>setHaushaltseinkommen(+e.target.value||0)}
+                  disabled={gebaeude==="zfh"&&selbstWE===0}
+                  placeholder="Zu versteuerndes Haushaltseinkommen €"
+                  style={{ ...INP, marginBottom:8, opacity:(gebaeude==="zfh"&&selbstWE===0)?0.4:1 }} />
+                <CheckBox label="Mind. 1 Kind (< 18 J.) im Haushalt (− 10.000 € pauschal angerechnet)"
+                  checked={kindImHaushalt} onChange={setKindImHaushalt} disabled={gebaeude==="zfh"&&selbstWE===0} />
+                <div style={{ fontSize:11, color:T.accent, fontWeight:700, marginTop:-2, marginBottom:4 }}>
+                  → {kfw.einkommenSatz} % Einkommensbonus ({kfw.einkommenSatz===40?"≤ 30.000 €":kfw.einkommenSatz===30?"30.001–40.000 €":kfw.einkommenSatz===10?"40.001–50.000 €":"> 50.000 €"} maßgeblich)
+                </div>
+
+                <div style={{ fontSize:10, color:T.textFaint, lineHeight:1.7, marginTop:8 }}>
+                  Seit 21.07.2026 entfallen: Effizienzbonus (5 %) und Emissionsminderungszuschlag (2.500 €) ersatzlos.
+                  Förderdeckel je Wohneinheit jetzt {KFW_CAP} % (vorher 70 %).
+                </div>
               </div>
 
               <div style={C_S}>
@@ -822,22 +868,20 @@ export default function App() {
                     <Row label={`Zuschuss WE 1 — ${selbstWE>=1?"selbst genutzt":"vermietet"} (${kfw.we1.satz}%)`}
                       value={fmt(kfw.we1.zuschuss)} color={T.accent} bold />
                     <div style={{ fontSize:10, color:T.textFaint, marginBottom:8, marginTop:-2, paddingLeft:2 }}>
-                      30% Grund{kfw.we1.klima>0?" + 20% Klima":""}{kfw.we1.eink>0?" + 30% Einkommen":""}{kfw.we1.effi>0?" + 5% Effizienz":""}{kfw.we1.grund+kfw.we1.klima+kfw.we1.eink+kfw.we1.effi>70?" (auf 70% gedeckelt)":""}
+                      30% Grund{kfw.we1.klima>0?` + ${kfw.we1.klima}% Klima`:""}{kfw.we1.eink>0?` + ${kfw.we1.eink}% Einkommen`:""}{kfw.we1.grund+kfw.we1.klima+kfw.we1.eink>KFW_CAP?` (auf ${KFW_CAP}% gedeckelt)`:""}
                     </div>
                     {kfw.we2 && <><Row label={`Zuschuss WE 2 — ${selbstWE>=2?"selbst genutzt":"vermietet"} (${kfw.we2.satz}%)`}
                       value={fmt(kfw.we2.zuschuss)} color={T.accent} bold />
                     <div style={{ fontSize:10, color:T.textFaint, marginBottom:8, marginTop:-2, paddingLeft:2 }}>
-                      30% Grund{kfw.we2.klima>0?" + 20% Klima":""}{kfw.we2.eink>0?" + 30% Einkommen":" · kein Einkommensbonus"}{kfw.we2.effi>0?" + 5% Effizienz":""}
+                      30% Grund{kfw.we2.klima>0?` + ${kfw.we2.klima}% Klima`:""}{kfw.we2.eink>0?` + ${kfw.we2.eink}% Einkommen`:" · kein Einkommensbonus"}
                     </div></>}
-                    {anzahlWE > 2 && kfw.zuschussWeitereWE > 0 && <Row label={`Zuschuss WE 3–${anzahlWE} (vermietet, je 35%)`} value={fmt(kfw.zuschussWeitereWE)} color={T.accent} bold />}
-                    {kfw.emissionsZuschlag > 0 && <Row label="Emissionsminderungszuschlag (pauschal)" value={fmt(kfw.emissionsZuschlag)} color="#10b981" bold />}
+                    {anzahlWE > 2 && kfw.zuschussWeitereWE > 0 && <Row label={`Zuschuss WE 3–${anzahlWE} (vermietet, je 30%)`} value={fmt(kfw.zuschussWeitereWE)} color={T.accent} bold />}
                   </>) : (<>
                     <Row label="Investition gesamt" value={fmt(investition)} />
                     <Row label={`Förderfähig (max. ${fmt(KFW_WE1)})`} value={fmt(kfw.basisWE1)} color={T.textMuted} />
                     {kfw.rest>0 && <Row label="Über KfW-Deckel (0% Förderung)" value={fmt(kfw.rest)} color={isDark?"rgba(255,160,80,0.85)":"#c05010"} />}
                     <div style={{ height:1, background:T.divider, margin:"8px 0" }} />
                     <Row label={`KfW-Zuschuss (${kfw.we1.satz}%)`} value={fmt(kfw.we1.zuschuss)} color={T.accent} bold />
-                    {kfw.emissionsZuschlag > 0 && <Row label="Emissionsminderungszuschlag (pauschal)" value={fmt(kfw.emissionsZuschlag)} color="#10b981" bold />}
                   </>)}
                 </div>
                 <div style={{ background:T.card, borderRadius:14, padding:"16px 20px", marginBottom:14, border:`1px solid ${T.cardBorder}` }}>
@@ -857,13 +901,13 @@ export default function App() {
                   <div key={lbl} style={{ marginBottom:12 }}>
                     <div style={{ fontSize:11, fontWeight:700, color:T.textSub, marginBottom:6 }}>{lbl} — {we.satz} % Fördersatz</div>
                     <div style={{ display:"flex", height:12, borderRadius:6, overflow:"hidden", marginBottom:4 }}>
-                      {[{w:we.grund,c:"#3b82f6"},{w:we.klima,c:"#f59e0b"},{w:we.eink,c:"#10b981"},{w:we.effi,c:"#8b5cf6"}].map((s,i)=>s.w>0&&(
-                        <div key={i} style={{ width:`${(s.w/70)*100}%`, background:s.c, minWidth:4 }} />
+                      {[{w:we.grund,c:"#3b82f6"},{w:we.klima,c:"#f59e0b"},{w:we.eink,c:"#10b981"}].map((s,i)=>s.w>0&&(
+                        <div key={i} style={{ width:`${(s.w/KFW_CAP)*100}%`, background:s.c, minWidth:4 }} />
                       ))}
                       <div style={{ flex:1, background:T.divider }} />
                     </div>
                     <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                      {[["30% Basis","#3b82f6",we.grund>0],[`+${we.klima}% Klima`,"#f59e0b",we.klima>0],[`+${we.eink}% Eink.`,"#10b981",we.eink>0],[`+${we.effi}% Effi.`,"#8b5cf6",we.effi>0]].map(([n,c,a])=>(
+                      {[["30% Basis","#3b82f6",we.grund>0],[`+${we.klima}% Klima`,"#f59e0b",we.klima>0],[`+${we.eink}% Eink.`,"#10b981",we.eink>0]].map(([n,c,a])=>(
                         <span key={n} style={{ fontSize:9, color:a?T.textSub:T.textFaint, display:"flex", alignItems:"center", gap:3 }}>
                           <span style={{ width:6, height:6, borderRadius:2, background:a?c:T.divider, display:"inline-block" }} />{n}
                         </span>
@@ -875,29 +919,26 @@ export default function App() {
 
               {/* Szenarien-Grid */}
               <div style={C_S}>
-                <div style={SEC}>📋 Alle Szenarien im Vergleich — {gebaeude==="efh"?"EFH":"ZFH"}</div>
+                <div style={SEC}>📋 Einkommensbonus-Szenarien im Vergleich — {gebaeude==="efh"?"EFH":"ZFH"}</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                  {[{id:"A",gasAlt:true,mitE:false},{id:"B",gasAlt:true,mitE:true},{id:"C",gasAlt:false,mitE:false},{id:"D",gasAlt:false,mitE:true}].map(s=>{
+                  {EINK_SZENARIEN.map(s=>{
                     const k = berechneKfW({ gebaeude, selbstgenutztWE:selbstWE, investition, anzahlWE,
-                      gasAlt:s.gasAlt, mitKlima:true, mitEinkommen:s.mitE, mitEffizienz, heiztyp, mitEmissionsZuschlag });
-                    const isAktiv = gasAlt===s.gasAlt && mitEinkommen===s.mitE;
-                    const desc = heiztyp==="gas"
-                      ? `Gas ${s.gasAlt?"≥":"<"} 20 J. · ${s.mitE?"mit":"kein"} Einkommensbonus`
-                      : `${s.gasAlt?"Klimabonus":"Kein Klimabonus"} · ${s.mitE?"mit":"kein"} Einkommensbonus`;
+                      gasAlt, mitKlima, klimaSatz:klimaZeitraum.satz, haushaltseinkommen:s.beispiel, kindImHaushalt:false, heiztyp });
+                    const isAktiv = kfw.einkommenSatz === s.satz;
                     return (
-                      <div key={s.id} onClick={()=>{ setGasAlt(s.gasAlt); setMitEinkommen(s.mitE); }}
+                      <div key={s.id} onClick={()=>{ setHaushaltseinkommen(s.beispiel); setKindImHaushalt(false); }}
                         style={{ padding:"14px 16px", borderRadius:14, cursor:"pointer", transition:"all 0.15s",
                           border: isAktiv?`2px solid ${T.accent}`:`1px solid ${T.cardBorder}`,
                           background: isAktiv?T.infoBoxGreen:T.rowHover }}>
                         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
                           <div>
-                            <span style={{ fontSize:13, fontWeight:800, color:isAktiv?T.accent:T.text }}>Var. {s.id}</span>
+                            <span style={{ fontSize:13, fontWeight:800, color:isAktiv?T.accent:T.text }}>+{s.satz}% Einkommen</span>
                             {isAktiv && <span style={{ fontSize:9, background:`${T.accent}25`, color:T.accent,
                               borderRadius:8, padding:"2px 7px", marginLeft:6, fontWeight:700 }}>AKTIV</span>}
                           </div>
                           <span style={{ fontSize:18, fontWeight:800, color:T.accent }}>{fmt(k.zuschussGes)}</span>
                         </div>
-                        <div style={{ fontSize:10, color:T.textFaint, marginBottom:8, lineHeight:1.5 }}>{desc}</div>
+                        <div style={{ fontSize:10, color:T.textFaint, marginBottom:8, lineHeight:1.5 }}>{s.label} zu versteuerndes Einkommen</div>
                         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4, fontSize:10 }}>
                           {gebaeude==="zfh" ? (<>
                             <div style={{ color:T.textMuted }}>WE1: {k.we1.satz}% → {fmt(k.we1.zuschuss)}</div>
@@ -909,8 +950,8 @@ export default function App() {
                           <div style={{ color:T.accent2, fontWeight:700 }}>Eigenanteil: {fmt(k.investNetto)}</div>
                         </div>
                         <div style={{ display:"flex", height:5, borderRadius:3, overflow:"hidden", marginTop:8 }}>
-                          {[{w:k.we1.grund,c:"#3b82f6"},{w:k.we1.klima,c:"#f59e0b"},{w:k.we1.eink,c:"#10b981"},{w:k.we1.effi,c:"#8b5cf6"}].map((seg,i)=>seg.w>0&&(
-                            <div key={i} style={{ width:`${(seg.w/70)*100}%`, background:seg.c, minWidth:3 }} />
+                          {[{w:k.we1.grund,c:"#3b82f6"},{w:k.we1.klima,c:"#f59e0b"},{w:k.we1.eink,c:"#10b981"}].map((seg,i)=>seg.w>0&&(
+                            <div key={i} style={{ width:`${(seg.w/KFW_CAP)*100}%`, background:seg.c, minWidth:3 }} />
                           ))}
                           <div style={{ flex:1, background:T.divider }} />
                         </div>
@@ -919,7 +960,7 @@ export default function App() {
                   })}
                 </div>
                 <div style={{ fontSize:10, color:T.textFaint, marginTop:10, lineHeight:1.8 }}>
-                  Klick auf eine Variante übernimmt die Einstellungen · Effizienzbonus: {mitEffizienz?"aktiv +5%":"inaktiv"}
+                  Klick auf eine Variante übernimmt das Beispiel-Einkommen · Klimabonus aktuell: {klimaZeitraum.satz}% ({klimaZeitraum.label})
                 </div>
               </div>
 
