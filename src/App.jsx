@@ -151,6 +151,18 @@ const EINK_SZENARIEN = [
   { id:"A", label:"> 50.000 €",        satz:0,  beispiel:60000 },
 ];
 
+// § 35c EStG – Steuerermäßigung für energetische Sanierungsmaßnahmen (Alternative zur KfW-458-Förderung,
+// beide sind nicht kombinierbar). 20 % der Aufwendungen, gedeckelt auf max. 200.000 € Bemessungsgrundlage
+// je begünstigtem Objekt, verteilt über 3 Steuerjahre: Jahr 1 + 2 je 7 % (max. 14.000 €/Jahr),
+// Jahr 3: 6 % (max. 12.000 €/Jahr). Voraussetzung: Gebäude bei Beginn der Maßnahme älter als 10 Jahre,
+// selbstgenutztes Wohneigentum, Ausführung durch Fachunternehmen mit Bescheinigung.
+const STEUER_35C_MAX_BEMESSUNG = 200000;
+const STEUER_35C_JAHRE = [
+  { jahr:1, satz:7, deckel:14000 },
+  { jahr:2, satz:7, deckel:14000 },
+  { jahr:3, satz:6, deckel:12000 },
+];
+
 const fmt  = (v,d=0) => Number(v).toLocaleString("de-DE",{style:"currency",currency:"EUR",maximumFractionDigits:d});
 const fmtN = (v,d=0) => Number(v).toLocaleString("de-DE",{maximumFractionDigits:d});
 
@@ -278,6 +290,16 @@ function berechneKfW({ gebaeude, selbstgenutztWE, investition, anzahlWE,
            einkommenSatz, zuschussWeitereWE };
 }
 
+// § 35c EStG – Steuerermäßigung über 3 Jahre berechnen
+function berechneSteuer35c(investition) {
+  const bemessung = Math.min(investition, STEUER_35C_MAX_BEMESSUNG);
+  const gedeckelt  = investition > STEUER_35C_MAX_BEMESSUNG;
+  const jahre = STEUER_35C_JAHRE.map(j => ({ ...j, betrag: Math.min(bemessung * j.satz / 100, j.deckel) }));
+  const summe = jahre.reduce((s,j) => s + j.betrag, 0);
+  const effSatz = investition > 0 ? Math.round(summe / investition * 1000) / 10 : 0;
+  return { bemessung, gedeckelt, jahre, summe, effSatz, investNetto: investition - summe };
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // HAUPT-APP
 // ═════════════════════════════════════════════════════════════════════════════
@@ -309,6 +331,10 @@ export default function App() {
   const [anzahlWE,           setAnzahlWE]           = useState(2);    // bei ZFH/MFH
   const [klimaZeitraumId, setKlimaZeitraumId] = useState(()=>aktuellerKlimaZeitraum().id);
 
+  // ── Fördervariante: KfW-458-Zuschuss ODER § 35c EStG (Alternative, nicht kombinierbar) ──
+  const [foerderVariante, setFoerderVariante] = useState("kfw"); // "kfw" | "35c"
+  const [gebaeudeUeber10Jahre, setGebaeudeUeber10Jahre] = useState(true); // Voraussetzung § 35c
+
   // ── Energiepreise & Steigerung ─────────────────────────────────────────────
   const [preise, setPreise] = useState({ gas:0.12, oel:1.00, nachtspeicher:0.28, fernwaerme:0.14, wp_strom:0.22 });
   const [steigerung, setSteigerung] = useState({ gas:5, oel:4, nachtspeicher:2, fernwaerme:3, wp_strom:1 });
@@ -330,6 +356,9 @@ export default function App() {
     gebaeude, selbstgenutztWE:selbstWE, investition, anzahlWE,
     gasAlt, mitKlima, klimaSatz:klimaZeitraum.satz, haushaltseinkommen, kindImHaushalt, heiztyp,
   }), [gebaeude, selbstWE, investition, anzahlWE, gasAlt, mitKlima, klimaZeitraum.satz, haushaltseinkommen, kindImHaushalt, heiztyp]);
+
+  const steuer35c = useMemo(() => berechneSteuer35c(investition), [investition]);
+  const berechtigt35c = gebaeudeUeber10Jahre && selbstWE >= 1;
 
   const zeitreihe = useMemo(() => {
     const rows = [];
@@ -723,12 +752,39 @@ export default function App() {
       {tab==="foerderung" && (
         <div style={{ maxWidth:1200, margin:"0 auto", padding:"26px 20px" }}>
           <div style={{ marginBottom:20 }}>
-            <div style={{ fontSize:17, fontWeight:800, marginBottom:3, color:T.text }}>🏦 KfW 458 — Förderrechner & Szenarien</div>
+            <div style={{ fontSize:17, fontWeight:800, marginBottom:3, color:T.text }}>🏦 Förderrechner & Szenarien</div>
             <div style={{ fontSize:12, color:T.textMuted }}>Alle Einstellungen mit dem Rechner-Tab verknüpft · BEG-EM-Richtlinien Stand 21.07.2026</div>
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"360px 1fr", gap:20, alignItems:"start" }}>
             <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+
+              <div style={C_S}>
+                <div style={SEC}>Fördervariante</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+                  {[["kfw","🏦","KfW 458","Zuschuss"],["35c","📄","§ 35c EStG","Steuerermäßigung"]].map(([id,ico,lbl,sub])=>(
+                    <button key={id} onClick={()=>setFoerderVariante(id)} style={{
+                      padding:"13px 8px", borderRadius:12, cursor:"pointer", textAlign:"center", fontFamily:"inherit",
+                      border: foerderVariante===id?`2px solid ${T.accent}`:`1px solid ${T.cardBorder}`,
+                      background: foerderVariante===id?(isDark?"rgba(0,229,160,0.1)":"rgba(0,180,120,0.08)"):T.rowHover,
+                      color: foerderVariante===id?T.accent:T.textSub, fontWeight:foerderVariante===id?700:500,
+                    }}>
+                      <div style={{ fontSize:22, marginBottom:4 }}>{ico}</div>
+                      <div style={{ fontSize:13 }}>{lbl}</div>
+                      <div style={{ fontSize:10, color:T.textFaint, marginTop:2 }}>{sub}</div>
+                    </button>
+                  ))}
+                </div>
+                <div style={{ background:T.rowHover, borderRadius:10, padding:"10px 12px", fontSize:11, border:`1px solid ${T.cardBorder}` }}>
+                  <Row label="🏦 KfW-458-Zuschuss wäre" value={fmt(kfw.zuschussGes)} color={foerderVariante==="kfw"?T.accent:T.textMuted} bold={foerderVariante==="kfw"} />
+                  <Row label="📄 § 35c Steuerermäßigung wäre" value={`${fmt(steuer35c.summe)} (3 J.)`} color={foerderVariante==="35c"?T.accent:T.textMuted} bold={foerderVariante==="35c"} />
+                </div>
+                <div style={{ fontSize:10, color:T.textFaint, lineHeight:1.7, marginTop:10 }}>
+                  ⚖️ Beide Förderarten sind für dieselbe Maßnahme <strong>nicht kombinierbar</strong> — nur eine
+                  Variante ist wählbar. Ein KfW-Zuschuss oder zinsverbilligter Förderkredit schließt die
+                  Steuerermäßigung nach § 35c EStG für diese Maßnahme aus, und umgekehrt.
+                </div>
+              </div>
 
               <div style={C_S}>
                 <div style={SEC}>Gebäudeart & Nutzung</div>
@@ -812,6 +868,33 @@ export default function App() {
                 )}
               </div>
 
+              {foerderVariante==="35c" && (
+                <div style={C_S}>
+                  <div style={SEC}>Voraussetzungen § 35c EStG</div>
+                  <CheckBox label="Gebäude ist bei Beginn der Maßnahme mindestens 10 Jahre alt"
+                    checked={gebaeudeUeber10Jahre} onChange={setGebaeudeUeber10Jahre} />
+                  <div style={{ fontSize:12, color:T.textSub, marginBottom:10, lineHeight:1.6 }}>
+                    Nutzung: {selbstWE>=1
+                      ? <span style={{ color:T.accent, fontWeight:700 }}>Selbstgenutzt ✔ (Voraussetzung erfüllt)</span>
+                      : <span style={{ color:"#ff5959", fontWeight:700 }}>Nicht selbstgenutzt ✘ — § 35c gilt nur für selbstgenutztes Wohneigentum</span>}
+                  </div>
+                  {!berechtigt35c && (
+                    <div style={{ background:T.infoBoxAmber, borderRadius:10, padding:"10px 12px", fontSize:11,
+                      color:isDark?"#e0b040":"#8a5a00", lineHeight:1.7, marginBottom:6 }}>
+                      ⚠️ § 35c EStG ist hier <strong>nicht anwendbar</strong> — beide Voraussetzungen (Gebäudealter
+                      ≥ 10 Jahre, Selbstnutzung) müssen erfüllt sein.
+                    </div>
+                  )}
+                  <div style={{ fontSize:10, color:T.textFaint, lineHeight:1.8, marginTop:8 }}>
+                    Weitere Voraussetzungen: Ausführung durch ein <strong>Fachunternehmen</strong> mit Bescheinigung
+                    nach amtlichem Muster (ESanMV); Beantragung über die <strong>Steuererklärung</strong>
+                    (Anlage „Energetische Maßnahmen“) für die 3 Jahre nach Fertigstellung. Aufwendungen für einen
+                    Energieberater sind zusätzlich zu 50 % (statt 20 %) absetzbar.
+                  </div>
+                </div>
+              )}
+
+              {foerderVariante==="kfw" && (
               <div style={C_S}>
                 <div style={SEC}>Förderbausteine KfW 458 (Stand 21.07.2026)</div>
                 <CheckBox label="✅ Grundförderung 30 % (immer enthalten)" checked={true} onChange={()=>{}} disabled />
@@ -843,6 +926,7 @@ export default function App() {
                   Förderdeckel je Wohneinheit jetzt {KFW_CAP} % (vorher 70 %).
                 </div>
               </div>
+              )}
 
               <div style={C_S}>
                 <div style={SEC}>Investitionskosten</div>
@@ -852,6 +936,7 @@ export default function App() {
 
             {/* RECHTS Förderrechner */}
             <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+              {foerderVariante==="kfw" && (<>
               <div style={{ ...C_S, background:T.cardAlt, border:`1px solid ${T.accent}30` }}>
                 <div style={SEC}>Ihr KfW-Förderanspruch</div>
                 <div style={{ marginBottom:16 }}>
@@ -970,6 +1055,57 @@ export default function App() {
                   KfW-Ergänzungskredit 358/359 für Eigenanteil {fmt(kfw.investNetto)} ab 0,01 % eff.
                 </div>
               </div>
+              </>)}
+
+              {foerderVariante==="35c" && (<>
+              <div style={{ ...C_S, background:T.cardAlt, border:`1px solid ${T.accent}30` }}>
+                <div style={SEC}>Ihre Steuerermäßigung § 35c EStG</div>
+                <div style={{ marginBottom:16 }}>
+                  <Row label="Investition gesamt" value={fmt(investition)} />
+                  <Row label={`Bemessungsgrundlage (max. ${fmt(STEUER_35C_MAX_BEMESSUNG)})`} value={fmt(steuer35c.bemessung)} color={T.textMuted} />
+                  {steuer35c.gedeckelt && <Row label="Über dem Bemessungs-Deckel (0 % begünstigt)" value={fmt(investition-steuer35c.bemessung)} color={isDark?"rgba(255,160,80,0.85)":"#c05010"} />}
+                  <div style={{ height:1, background:T.divider, margin:"8px 0" }} />
+                  {steuer35c.jahre.map(j=>(
+                    <Row key={j.jahr} label={`Steuerjahr ${j.jahr} (${j.satz} %, max. ${fmt(j.deckel)})`} value={fmt(j.betrag)} color={T.accent} bold />
+                  ))}
+                </div>
+                <div style={{ background:T.card, borderRadius:14, padding:"16px 20px", marginBottom:14, border:`1px solid ${T.cardBorder}` }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                    <div>
+                      <div style={{ fontSize:10, color:T.textMuted, marginBottom:4 }}>Steuerermäßigung gesamt (3 J.)</div>
+                      <div style={{ fontSize:32, fontWeight:800, color:T.accent, letterSpacing:"-1px" }}>{fmt(steuer35c.summe)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize:10, color:T.textMuted, marginBottom:4 }}>Ihr Eigenanteil (rechnerisch)</div>
+                      <div style={{ fontSize:32, fontWeight:800, color:T.accent2, letterSpacing:"-1px" }}>{fmt(steuer35c.investNetto)}</div>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize:11, fontWeight:700, color:T.textSub, marginBottom:6 }}>Verteilung über 3 Steuerjahre — {steuer35c.effSatz} % effektiv</div>
+                <div style={{ display:"flex", height:12, borderRadius:6, overflow:"hidden", marginBottom:8 }}>
+                  {steuer35c.jahre.map((j,i)=>(
+                    <div key={i} style={{ width:`${(j.betrag/(steuer35c.summe||1))*100}%`, background:["#3b82f6","#f59e0b","#10b981"][i], minWidth:j.betrag>0?4:0 }} />
+                  ))}
+                </div>
+                <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                  {steuer35c.jahre.map((j,i)=>(
+                    <span key={i} style={{ fontSize:9, color:T.textSub, display:"flex", alignItems:"center", gap:3 }}>
+                      <span style={{ width:6, height:6, borderRadius:2, background:["#3b82f6","#f59e0b","#10b981"][i], display:"inline-block" }} />
+                      Jahr {j.jahr}: {fmt(j.betrag)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ ...C_S, padding:"13px 20px" }}>
+                <div style={{ fontSize:11, color:T.textMuted, lineHeight:1.8 }}>
+                  🔔 Die Steuerermäßigung mindert unmittelbar die <strong>Steuerschuld</strong> (kein Abzug von der
+                  Bemessungsgrundlage) und kann diese in keinem Jahr unter 0 € senken; nicht ausgeschöpfte Beträge
+                  verfallen und werden <strong>nicht</strong> auf Folgejahre übertragen. Beantragung über die
+                  Steuererklärung (Anlage „Energetische Maßnahmen“) — Rechtsgrundlage: § 35c EStG i. V. m. ESanMV.
+                </div>
+              </div>
+              </>)}
             </div>
           </div>
         </div>
